@@ -29,29 +29,89 @@ router.post("/register", (req, res) => {
 router.post("/login", (req, res) => {
   const { email, password } = req.body;
 
-  db.query(
-    "SELECT * FROM users WHERE email = ?",
-    [email],
-    async (err, results) => {
-      if (err || results.length === 0)
-        return res.status(400).json({ error: "User not found" });
+  db.query("SELECT * FROM users WHERE email = ?", [email], async (err, results) => {
+    if (err || results.length === 0)
+      return res.status(400).json({ error: "User not found" });
 
-      const user = results[0];
-      const validPassword = await bcrypt.compare(password, user.password);
+    const user = results[0];
+    const validPassword = await bcrypt.compare(password, user.password);
 
-      if (!validPassword)
-        return res.status(401).json({ error: "Invalid password" });
+    if (!validPassword)
+      return res.status(401).json({ error: "Invalid password" });
 
-      const token = jwt.sign(
-        { id: user.id, email: user.email, phone_number: user.phone_number  },
-        process.env.JWT_SECRET
-      );
+    // Fetch role
+    db.query(
+      `SELECT r.name AS role
+       FROM roles r
+       JOIN user_roles ur ON ur.role_id = r.id
+       WHERE ur.user_id = ?`,
+      [user.id],
+      (err2, roleResults) => {
+        if (err2) return res.status(500).json({ error: err2 });
 
-      res.json({ message: "Login success", token });
-    }
-  );
+        const role = roleResults[0]?.role || "user";
+
+        const token = jwt.sign(
+          { id: user.id, email: user.email, phone_number: user.phone_number, role },
+          process.env.JWT_SECRET
+        );
+
+        res.json({ message: "Login success", token });
+      }
+    );
+  });
 });
 
+router.post("/login-otp", (req, res) => {
+  const { email, phone_number, otp } = req.body;
+
+  if ((!email && !phone_number) || !otp) {
+    return res.status(400).json({ error: "Email or phone number and OTP are required" });
+  }
+
+  const key = email || phone_number;
+  if (otpStore[key] != otp) {
+    return res.status(401).json({ error: "Invalid OTP" });
+  }
+
+  const query = email ? "SELECT * FROM users WHERE email = ?" : "SELECT * FROM users WHERE phone_number = ?";
+  const value = email || phone_number;
+
+  db.query(query, [value], (err, results) => {
+    if (err || results.length === 0) return res.status(404).json({ error: "User not found" });
+
+    const user = results[0];
+
+ 
+    const updateField = email ? "email_verify" : "phone_verify";
+    db.query(`UPDATE users SET ${updateField} = 1 WHERE ${email ? "email" : "phone_number"} = ?`, [value]);
+
+   
+    db.query(
+      `SELECT r.name AS role
+       FROM roles r
+       JOIN user_roles ur ON ur.role_id = r.id
+       WHERE ur.user_id = ?`,
+      [user.id],
+      (err2, roleResults) => {
+        if (err2) return res.status(500).json({ error: err2 });
+
+        const role = roleResults[0]?.role || "user";
+
+        const token = jwt.sign(
+          { id: user.id, email: user.email, phone_number: user.phone_number, role },
+          process.env.JWT_SECRET
+        );
+
+        delete otpStore[key];
+
+        res.json({ message: "OTP Login success", token });
+      }
+    );
+  });
+});
+
+ 
 router.post("/generate-otp", (req, res) => {
   const { email, phone_number } = req.body;
 
@@ -84,42 +144,7 @@ router.post("/generate-otp", (req, res) => {
     });
   });
 });
-
-router.post("/login-otp", (req, res) => {
-  const { email, phone_number, otp } = req.body;
  
-  if ((!email && !phone_number) || !otp) {
-    return res.status(400).json({ error: "Email or phone number and OTP are required" });
-  }
- 
-  const key = email || phone_number;
-  if (otpStore[key] != otp) {
-    return res.status(401).json({ error: "Invalid OTP" });
-  }
- 
-  const query = email ? "SELECT * FROM users WHERE email = ?" : "SELECT * FROM users WHERE phone_number = ?";
-  const value = email || phone_number;
- 
-  db.query(query, [value], (err, results) => {
-    if (err || results.length === 0) {
-      return res.status(404).json({ error: "User not found" });
-    }
-
-    const user = results[0];
- 
-    const updateField = email ? "email_verify" : "phone_verify";
-    db.query(`UPDATE users SET ${updateField} = 1 WHERE ${email ? "email" : "phone_number"} = ?`, [value]);
- 
-    const token = jwt.sign(
-      { id: user.id, email: user.email, phone_number: user.phone_number },
-      process.env.JWT_SECRET
-    );
- 
-    delete otpStore[key];
- 
-    res.json({ message: "OTP Login success", token });
-  });
-});
 
 router.put("/update-profile", verifyToken, (req, res) => {
   const userId = req.user.id;
