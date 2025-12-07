@@ -88,7 +88,7 @@ router.put("/update-user/:id", verifyToken, (req, res) => {
   const userId = req.params.id;
   const { name, email, phone_number, role_id } = req.body;
 
-  if (!name || !email || !role_id) {
+  if (!name || !email || !role_id || !phone_number) {
     return res.status(400).json({ status: false, message: "Name, email, and role_id are required" });
   }
 
@@ -114,7 +114,7 @@ router.put("/update-user/:id", verifyToken, (req, res) => {
           return res.json({
             status: true,
             message: "User updated successfully",
-            data: { userId, role_id }
+             data: { userId, name, email, phone_number, role_id }
           });
         }
       );

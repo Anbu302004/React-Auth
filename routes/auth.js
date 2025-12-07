@@ -200,6 +200,12 @@ router.put("/update-profile", verifyToken, (req, res) => {
   const userId = req.user.id;
   const { name, phone_number, email, password } = req.body;
 
+  if (!name || !phone_number || !email || !password) {
+    return res.status(400).json({
+      status: false,
+      message: "All fields Name, phone_number, email, password are required"
+    });
+  }
   const updates = [];
   const values = [];
 
