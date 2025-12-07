@@ -31,7 +31,7 @@ app.get("/", (req, res) => {
   res.send("API is running...");
 });
 
-const PORT = parseInt(process.env.PORT, 10) || 5000; // ensures numeric port
+const PORT = parseInt(process.env.PORT) || 5000;  
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });

@@ -3,16 +3,38 @@ import { verifyToken } from "../middleware/auth.js";
 import db from "../config/db.js";
 
 const router = express.Router();
+// /* =========================================
+// GET USER PROFILE
 
 router.get("/profile", verifyToken, (req, res) => {
     const userId = req.user.id;
-    db.query("SELECT id, name, email, phone_number FROM users WHERE id = ?", [userId], (err, results) => {
-      if (err) return res.status(500).json({ error: err });
-        if (results.length === 0) {
-            return res.status(404).json({ error: "User not found" });
+
+    db.query(
+        "SELECT id, name, email, phone_number FROM users WHERE id = ?",
+        [userId],
+        (err, results) => {
+            if (err) {
+                return res.status(500).json({
+                    status: false,
+                    message: "Database error",
+                    error: err.message
+                });
+            }
+
+            if (results.length === 0) {
+                return res.status(404).json({
+                    status: false,
+                    message: "User not found"
+                });
+            }
+
+            return res.json({
+                status: true,
+                message: "Profile fetched successfully",
+                data: results[0]
+            });
         }
-        res.json({ profile: results[0] });
-    });
+    );
 });
 
 export default router;
