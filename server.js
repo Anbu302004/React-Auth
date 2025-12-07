@@ -2,9 +2,9 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 
-// Routes
 import authRoutes from "./routes/auth.js";
 import adminRoutes from "./routes/admin.js";
+import usersRoutes from "./routes/users.js";
 import categoriesRoutes from "./routes/categories.js";
 import exploreRoutes from "./routes/explore.js";
 import galleryRoutes from "./routes/gallery.js"; 
@@ -24,6 +24,7 @@ app.use("/api", exploreRoutes);
 app.use("/api", galleryRoutes);
 app.use("/api", pagesRoutes);
 app.use("/admin", adminRoutes);
+app.use("/users", usersRoutes);
 
  
 app.get("/", (req, res) => {
