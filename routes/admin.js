@@ -57,6 +57,37 @@ router.post("/create-user", verifyToken, (req, res) => {
 });
 
 
+ router.put("/update-user/:id", verifyToken, (req, res) => {
+  if (req.user.role !== "admin") {
+    return res.status(403).json({ error: "Access denied" });
+  }
+
+  const userId = req.params.id;
+  const { name, email, phone_number, role_id } = req.body;
+
+  if (!name || !email || !role_id) {
+    return res.status(400).json({ error: "Name, email, and role_id are required" });
+  }
+
+  db.query(
+    "UPDATE users SET name = ?, email = ?, phone_number = ? WHERE id = ?",
+    [name, email, phone_number, userId],
+    (err, result) => {
+      if (err) return res.status(500).json({ error: err });
+      db.query(
+        "UPDATE user_roles SET role_id = ? WHERE user_id = ?",
+        [role_id, userId],
+        (err2) => {
+          if (err2) return res.status(500).json({ error: err2 });
+
+          res.json({ message: "User updated successfully", userId, role_id });
+        }
+      );
+    }
+  );
+});
+
+
 
 
 export default router;
