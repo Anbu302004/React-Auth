@@ -87,7 +87,16 @@ router.post("/create-user", verifyToken, (req, res) => {
   );
 });
 
-
+router.delete("/delete-user/:id", verifyToken, (req, res) => {
+  if(req.user.role !== "admin") {
+    return res.status(403).json({ error: "Access denied" });
+  }
+  const userId = req.params.id;
+  db.query("DELETE FROM users WHERE id = ?", [userId], (err, result) => {
+    if(err) return res.status(500).json({ error: err });
+    res.json({ message: "User deleted successfully", userId });
+  })
+})
 
 
 export default router;
