@@ -1,5 +1,6 @@
 import express from "express";
 import { verifyToken } from "../middleware/auth.js";
+import bcrypt from "bcryptjs";
 import db from "../config/db.js";
 const router = express.Router();
 
@@ -19,6 +20,40 @@ router.get("/list-users", verifyToken, (req, res) => {
     if (err) return res.status(500).json({ error: err });
     res.json({ users: results });
   });
+});
+
+router.post("/create-user", verifyToken, (req, res) => { 
+  if (req.user.role !== "admin") {
+    return res.status(403).json({ error: "Access denied" });
+  }
+
+  const { name, email, password, phone_number, role_id } = req.body;
+
+  if (!name || !email || !password || !role_id) {
+    return res.status(400).json({ error: "Name, email, password, and role_id are required" });
+  }
+
+  const hashed = bcrypt.hashSync(password, 10);
+ 
+  db.query(
+    "INSERT INTO users (name, email, password, phone_number) VALUES (?, ?, ?, ?)",
+    [name, email, hashed, phone_number],
+    (err, result) => {
+      if (err) return res.status(500).json({ error: err });
+
+      const userId = result.insertId; 
+ 
+      db.query(
+        "INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)",
+        [userId, role_id],
+        (err2) => {
+          if (err2) return res.status(500).json({ error: err2 });
+
+          res.json({ message: "User created successfully", userId, role_id });
+        }
+      );
+    }
+  );
 });
 
 
