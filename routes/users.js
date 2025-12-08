@@ -2,10 +2,9 @@ import express from "express";
 import { verifyToken } from "../middleware/auth.js";
 import db from "../config/db.js";
 
-const router = express.Router();
-// /* =========================================
-// GET USER PROFILE
+const router = express.Router(); 
 
+// ========================= Get Profile =========================
 router.get("/profile", verifyToken, (req, res) => {
     const userId = req.user.id;
 

@@ -3,10 +3,8 @@ import { verifyToken } from "../middleware/auth.js";
 import bcrypt from "bcryptjs";
 import db from "../config/db.js";
 const router = express.Router();
-
-/* =========================================
-   LIST USERS (ADMIN ONLY)
-========================================= */
+ 
+// ========================= List User =========================
 router.get("/users", verifyToken, (req, res) => {
   if (req.user.role !== "admin") {
     return res.status(403).json({ status: false, message: "Access denied" });
@@ -26,11 +24,7 @@ router.get("/users", verifyToken, (req, res) => {
     return res.json({ status: true, message: "Users fetched successfully", data: results });
   });
 });
-
-
-/* =========================================
-   CREATE USER (ADMIN ONLY)
-========================================= */
+// ========================= Create User =========================
 router.post("/create", verifyToken, (req, res) => { 
   if (req.user.role !== "admin") {
     return res.status(403).json({ status: false, message: "Access denied" });
@@ -43,8 +37,7 @@ router.post("/create", verifyToken, (req, res) => {
   }
 
   const hashed = bcrypt.hashSync(password, 10);
-
-  // Insert user
+ 
   db.query(
     "INSERT INTO users (name, email, password, phone_number) VALUES (?, ?, ?, ?)",
     [name, email, hashed, phone_number],
@@ -57,8 +50,7 @@ router.post("/create", verifyToken, (req, res) => {
       }
 
       const userId = result.insertId;
-
-      // Assign role
+ 
       db.query(
         "INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)",
         [userId, role_id],
@@ -66,8 +58,7 @@ router.post("/create", verifyToken, (req, res) => {
           if (err2) {
             return res.status(500).json({ status: false, message: "Database error", error: err2.message });
           }
-
-          // Fetch role name from roles table
+ 
           db.query(
             "SELECT name AS role FROM roles WHERE id = ?",
             [role_id],
@@ -96,10 +87,8 @@ router.post("/create", verifyToken, (req, res) => {
       );
     }
   );
-});
-/* =========================================
-   UPDATE USER (ADMIN ONLY)
-========================================= */
+}); 
+// ========================= Update User =========================
  router.put("/update/:id", verifyToken, (req, res) => {
   if (req.user.role !== "admin") {
     return res.status(403).json({ status: false, message: "Access denied" });
@@ -182,10 +171,8 @@ router.post("/create", verifyToken, (req, res) => {
       );
     }
   );
-});
-/* =========================================
-   DELETE USER (ADMIN ONLY)
-========================================= */
+}); 
+// ========================= Delete User =========================
 router.delete("/delete/:id", verifyToken, (req, res) => {
   if (req.user.role !== "admin") {
     return res.status(403).json({ status: false, message: "Access denied" });
