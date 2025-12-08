@@ -1,8 +1,8 @@
 import express from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import db from "../config/db.js";
-import { verifyToken } from "../middleware/auth.js";
+import db from "../config/db.js"; 
+import { verifyToken, logout } from "../middleware/auth.js";
 import dotenv from "dotenv";
 dotenv.config();
 
@@ -343,10 +343,7 @@ router.put("/update", verifyToken, (req, res) => {
   });
 });
 // ========================= LOGOUT =========================
-router.post("/logout", verifyToken, (req, res) => {
-  res.json({ status: true, message: "Logout successful" });
-});
-
+router.post("/logout", verifyToken, logout);
 // ========================= ME =========================
 router.get("/me", verifyToken, (req, res) => {
   const userId = req.user.id;
