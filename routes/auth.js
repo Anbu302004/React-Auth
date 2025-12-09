@@ -269,7 +269,6 @@ router.post("/otp", (req, res) => {
     });
   });
 });
-
 // ========================= UPDATE PROFILE =========================
 router.put("/update", verifyToken, (req, res) => {
   const userId = req.user.id;

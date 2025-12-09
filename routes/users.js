@@ -1,13 +1,10 @@
 import express from "express";
 import { verifyToken } from "../middleware/auth.js";
 import db from "../config/db.js";
-
 const router = express.Router(); 
-
 // ========================= Get Profile =========================
 router.get("/profile", verifyToken, (req, res) => {
     const userId = req.user.id;
-
     db.query(
         "SELECT id, name, email, phone_number FROM users WHERE id = ?",
         [userId],
@@ -19,14 +16,12 @@ router.get("/profile", verifyToken, (req, res) => {
                     error: err.message
                 });
             }
-
             if (results.length === 0) {
                 return res.status(404).json({
                     status: false,
                     message: "User not found"
                 });
             }
-
             return res.json({
                 status: true,
                 message: "Profile fetched successfully",
@@ -56,14 +51,12 @@ router.put("/deactivate", verifyToken, (req, res) => {
                     error: err.message
                 });
             }
-
             if (result.affectedRows === 0) {
                 return res.status(404).json({
                     status: false,
                     message: "User not found"
                 });
             }
-
             return res.json({
                 status: true,
                 message: "Account deactivated successfully"
@@ -81,7 +74,6 @@ router.delete("/delete", verifyToken, (req, res) => {
             message: `${userRole} is not allowed to delete their own account`
         });
     }
-
     db.query("DELETE FROM users WHERE id = ?", [userId], (err, result) => {
         if (err) {
             return res.status(500).json({
@@ -90,14 +82,12 @@ router.delete("/delete", verifyToken, (req, res) => {
                 error: err.message
             });
         }
-
         if (result.affectedRows === 0) {
             return res.status(404).json({
                 status: false,
                 message: "User not found"
             });
         }
-
         return res.json({
             status: true,
             message: "Your account has been deleted successfully"
