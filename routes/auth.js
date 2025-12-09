@@ -11,11 +11,18 @@ const otpStore = {};
 // ========================= REGISTER =========================
 router.post("/register", (req, res) => {
   const { name, email, password, phone_number } = req.body;
- 
-  if (!name || !email || !password || !phone_number) {
-    return res.status(400).json({ status: false, message: "All fields are required" });
+  if(!name) {
+    return  res.status(400).json({ status: false, message: "Name is required" });
   }
-
+  if(!email) {
+    return res.status(400).json({ status: false, message: "Email is required" });
+  }
+  if(!password) {
+    return res.status(400).json({ status: false, message: "Password is required" });
+  }
+  if(!phone_number || phone_number.trim() === "") {
+    return res.status(400).json({ status: false, message: "Phone number is required" });
+  }
   if (name.length < 3 || name.length > 50) {
     return res.status(400).json({ status: false, message: "Name must be between 3 and 50 characters" });
   }
@@ -281,7 +288,7 @@ router.put("/update", verifyToken, (req, res) => {
     return res.status(400).json({ status: false, message: "Name can only contain letters and spaces" });
   }
 
-  if (!phone_number) {
+  if (!phone_number || phone_number.trim() === "") {
     return res.status(400).json({ status: false, message: "Phone number is required" });
   }
 

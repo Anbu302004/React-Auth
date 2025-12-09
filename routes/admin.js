@@ -11,7 +11,7 @@ router.get("/users", verifyToken, (req, res) => {
   }
 
   const sql = `
-    SELECT u.id, u.name, u.email, u.phone_number, r.name AS role
+    SELECT u.id, u.name, u.email, u.phone_number,ur.role_id, r.name AS role
     FROM users u
     LEFT JOIN user_roles ur ON ur.user_id = u.id
     LEFT JOIN roles r ON r.id = ur.role_id
@@ -110,7 +110,7 @@ router.post("/create", verifyToken, (req, res) => {
     return res.status(400).json({ status: false, message: "Name can only contain letters, numbers, and spaces" });
   }
 
-  if (!phone_number) {
+  if (!phone_number || phone_number.trim() === "") {
     return res.status(400).json({ status: false, message: "Phone number is required" });
   }
 
