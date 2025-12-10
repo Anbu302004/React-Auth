@@ -9,19 +9,29 @@ router.get("/users", verifyToken, (req, res) => {
   if (req.user.role !== "admin") {
     return res.status(403).json({ status: false, message: "Access denied" });
   }
-  const sql = `
-    SELECT u.id, u.name, u.email, u.phone_number,ur.role_id, r.name AS role
+
+  let sql = `
+    SELECT u.status, u.id, u.name, u.email, u.phone_number, ur.role_id, r.name AS role
     FROM users u
     LEFT JOIN user_roles ur ON ur.user_id = u.id
     LEFT JOIN roles r ON r.id = ur.role_id
   `;
-  db.query(sql, (err, results) => {
+  const params = [];
+
+  // Check if role_id query param exists
+  if (req.query.role_id) {
+    sql += " WHERE ur.role_id = ?";
+    params.push(req.query.role_id);
+  }
+
+  db.query(sql, params, (err, results) => {
     if (err) {
       return res.status(500).json({ status: false, message: "Database error", error: err.message });
     }
     return res.json({ status: true, message: "Users fetched successfully", data: results });
   });
 });
+
 // ========================= Create User =========================
 router.post("/create", verifyToken, (req, res) => { 
   if (req.user.role !== "admin") {
@@ -187,17 +197,30 @@ router.delete("/delete/:id", verifyToken, (req, res) => {
   if (req.user.role !== "admin") {
     return res.status(403).json({ status: false, message: "Access denied" });
   }
+
   const userId = req.params.id;
+ 
+  if (req.user.id == userId) {
+    return res.status(400).json({
+      status: false,
+      message: "Cannot delete your own account"
+    });
+  }
+
   db.query("DELETE FROM users WHERE id = ?", [userId], (err, result) => {
     if (err) {
       return res.status(500).json({ status: false, message: "Database error", error: err.message });
     }
+
     if (result.affectedRows === 0) {
       return res.status(404).json({ status: false, message: "User not found" });
     }
-    return res.json({ status: true, message: "User deleted successfully", User: { userId } });
+
+    return res.json({ status: true, message: "User deleted successfully", user: { userId } });
   });
 });
+
+// ========================= Block User =========================
 router.put("/block/:id", verifyToken, (req, res) => {
   // Only admin can block
   if (req.user.role !== "admin") {
