@@ -8,20 +8,22 @@ router.get("/profile", verifyToken, (req, res) => {
     const userId = req.user.id;
 
     db.query(
-        "SELECT id, name, email, phone_number, status FROM users WHERE id = ?",
+        "SELECT id, name, email, phone_number, status, password FROM users WHERE id = ?",
         [userId],
         (err, results) => {
             if (err) {
                 return res.status(500).json({
                     status: false,
-                    message: "Database error"
+                    messages: ["Database error"],
+                    data: []
                 });
             }
 
             if (results.length === 0) {
                 return res.status(404).json({
                     status: false,
-                    message: "User not found"
+                    messages: ["User not found"],
+                    data: []
                 });
             }
 
@@ -30,19 +32,23 @@ router.get("/profile", verifyToken, (req, res) => {
             if (user.status === "inactive") {
                 return res.status(403).json({
                     status: false,
-                    message: "Account is deactivated. Please login using OTP to activate."
+                    messages: [
+                        "Account is deactivated. Please login using OTP to activate."
+                    ],
+                    data: []
                 });
             }
 
             return res.json({
-                status: true,
-                message: "Profile fetched successfully",
-                data: {
-                    id: user.id,
-                    name: user.name,
-                    email: user.email,
-                    phone_number: user.phone_number
-                }
+                status: true, 
+                data: [
+                    {
+                        id: user.id,
+                        name: user.name,
+                        email: user.email,
+                        phone_number: user.phone_number,
+                    }
+                ]
             });
         }
     );
@@ -56,7 +62,8 @@ router.put("/deactivate", verifyToken, (req, res) => {
     if (userRole === "admin" || userRole === "subadmin") {
         return res.status(403).json({
             status: false,
-            message: `${userRole} is not allowed to deactivate their own account`
+            messages: [`${userRole} is not allowed to deactivate their own account`],
+            data: []
         });
     }
 
@@ -67,21 +74,24 @@ router.put("/deactivate", verifyToken, (req, res) => {
             if (err) {
                 return res.status(500).json({
                     status: false,
-                    message: "Database error"
+                    messages: ["Database error"],
+                    data: []
                 });
             }
 
             if (result.affectedRows === 0) {
                 return res.status(404).json({
                     status: false,
-                    message: "User not found"
+                    messages: ["User not found"],
+                    data: []
                 });
             }
 
             return res.json({
                 status: true,
-                message: "Account deactivated successfully. You have been logged out.",
-                logout: true 
+                messages: ["Account deactivated successfully", "You have been logged out"],
+                data: [],
+                logout: true
             });
         }
     );
@@ -95,7 +105,8 @@ router.delete("/delete", verifyToken, (req, res) => {
     if (userRole === "admin" || userRole === "subadmin") {
         return res.status(403).json({
             status: false,
-            message: `${userRole} is not allowed to delete their own account`
+            messages: [`${userRole} is not allowed to delete their own account`],
+            data: []
         });
     }
 
@@ -103,20 +114,23 @@ router.delete("/delete", verifyToken, (req, res) => {
         if (err) {
             return res.status(500).json({
                 status: false,
-                message: "Database error"
+                messages: ["Database error"],
+                data: []
             });
         }
 
         if (result.affectedRows === 0) {
             return res.status(404).json({
                 status: false,
-                message: "User not found"
+                messages: ["User not found"],
+                data: []
             });
         }
 
         return res.json({
             status: true,
-            message: "Your account has been deleted successfully"
+            messages: ["Your account has been deleted successfully"],
+            data: []
         });
     });
 });
