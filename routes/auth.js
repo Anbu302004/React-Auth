@@ -8,15 +8,12 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const router = express.Router();
-const otpStore = {}; // simple in-memory OTP store (for demo only)
-
-// Helpers
+const otpStore = {};  
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const phoneRegex = /^[0-9]{10}$/;
 const nameRegex = /^[A-Za-z\s]+$/;
 
-function generateToken(payload) {
-  // you can add expiresIn here if needed
+function generateToken(payload) { 
   return jwt.sign(payload, process.env.JWT_SECRET);
 }
 
@@ -31,8 +28,7 @@ router.post("/register", (req, res) => {
   phone_number = phone_number ? phone_number.trim() : "";
 
   const errors = [];
-
-  // Basic validation
+ 
   if (!name) errors.push("Name is required");
   if (!email) errors.push("Email is required");
   if (!password) errors.push("Password is required");
@@ -58,8 +54,7 @@ router.post("/register", (req, res) => {
   }
 
   const hashed = bcrypt.hashSync(password, 10);
-
-  // Check duplicates for email & phone
+ 
   db.query(
     "SELECT email, phone_number FROM users WHERE email = ? OR phone_number = ?",
     [email, phone_number],
@@ -67,8 +62,7 @@ router.post("/register", (req, res) => {
       if (err) {
         return res.status(500).json({ status: false, messages: ["Database error"] });
       }
-
-      // Use Set to avoid duplicate messages
+ 
       const duplicateSet = new Set();
       if (result && result.length > 0) {
         result.forEach(row => {
@@ -80,8 +74,7 @@ router.post("/register", (req, res) => {
       if (duplicateSet.size > 0) {
         return res.status(409).json({ status: false, messages: Array.from(duplicateSet) });
       }
-
-      // Insert user
+ 
       db.query(
         "INSERT INTO users (name, email, password, phone_number, status) VALUES (?,?,?,?, 'active')",
         [name, email, hashed, phone_number],
@@ -91,8 +84,7 @@ router.post("/register", (req, res) => {
           }
 
           const userId = results.insertId;
-
-          // Assign default role 'user'
+ 
           db.query(
             "SELECT id AS role_id, name AS role_name FROM roles WHERE name = 'user' LIMIT 1",
             (err3, roleRes) => {
@@ -142,15 +134,13 @@ router.post("/register", (req, res) => {
   );
 });
 
-// ========================= LOGIN =========================
+ // ========================= LOGIN =========================
 router.post("/login", (req, res) => {
   let { email, password } = req.body || {};
 
-  // Trim & normalize
   email = email ? email.trim() : "";
   password = password ? password.trim() : "";
 
-  // Reject unexpected fields
   const allowedFields = ["email", "password"];
   const extraFields = Object.keys(req.body || {}).filter((k) => !allowedFields.includes(k));
   if (extraFields.length > 0) {
@@ -167,22 +157,20 @@ router.post("/login", (req, res) => {
     if (results.length === 0) return res.status(401).json({ status: false, message: "Incorrect email or password" });
 
     const user = results[0];
-
-    // Deny login for blocked users
-    if (user.status === "blocked") {
+    const uStatus = Number(user.status);  
+    if (uStatus === 0) {
       return res.status(403).json({ status: false, message: "Your account has been blocked. Contact admin." });
     }
-
+ 
     const validPassword = await bcrypt.compare(password, user.password);
     if (!validPassword) return res.status(401).json({ status: false, message: "Incorrect email or password" });
-
-    // If user is inactive or deactive, activate on successful login (but NOT blocked)
-    if (user.status === "inactive" || user.status === "deactive") {
-      db.query("UPDATE users SET status = 'active' WHERE id = ?", [user.id], (updErr) => {
-        // ignore updErr for login flow (could log it)
+ 
+    if (uStatus === 2) {
+      db.query("UPDATE users SET status = ? WHERE id = ?", [1, user.id], (updErr) => { 
+        user.status = 1;
         fetchRoleAndRespond(user, res);
       });
-    } else {
+    } else { 
       fetchRoleAndRespond(user, res);
     }
   });
@@ -219,7 +207,7 @@ router.post("/login", (req, res) => {
             phone_number: user.phone_number,
             role_id,
             role,
-            status: "active" // user just logged in (active)
+            status: Number(user.status)  
           }
         });
       }
@@ -227,15 +215,17 @@ router.post("/login", (req, res) => {
   }
 });
 
-// ========================= LOGIN WITH OTP =========================
+// ========================= LOGIN OTP =========================
 router.post("/login-otp", (req, res) => {
   let { email, phone_number, otp } = req.body || {};
   email = email ? email.trim() : "";
   phone_number = phone_number ? phone_number.trim() : "";
   otp = otp ? otp.toString().trim() : "";
-
-  if (!email && !phone_number) return res.status(400).json({ status: false, message: "Email or phone number is required" });
-  if (!otp) return res.status(400).json({ status: false, message: "OTP is required" });
+ 
+  if (!email && !phone_number) 
+    return res.status(400).json({ status: false, message: "Email or phone number is required" });
+  if (!otp) 
+    return res.status(400).json({ status: false, message: "OTP is required" });
 
   const key = email || phone_number;
   if (!otpStore[key] || otpStore[key].toString() !== otp.toString()) {
@@ -248,21 +238,20 @@ router.post("/login-otp", (req, res) => {
     if (results.length === 0) return res.status(404).json({ status: false, message: "Account not found, please register first" });
 
     const user = results[0];
-
-    // Do not auto-activate blocked account via OTP.
-    if (user.status === "blocked") {
+    const uStatus = Number(user.status);  
+ 
+    if (uStatus === 0) {
       return res.status(403).json({ status: false, message: "Your account has been blocked. Contact admin." });
     }
-
-    // Only change inactive/deactive -> active. Do NOT change blocked.
-    const newStatus = (user.status === "inactive" || user.status === "deactive") ? "active" : user.status;
+ 
+    const newStatus = (uStatus === 2) ? 1 : uStatus;
 
     db.query(
       `UPDATE users SET ${email ? "email_verify" : "phone_verify"} = 1, status = ? WHERE id = ?`,
       [newStatus, user.id],
       (errUpdate) => {
         if (errUpdate) return res.status(500).json({ status: false, message: "Database error" });
-
+ 
         db.query(
           `SELECT r.id AS role_id, r.name AS role
            FROM roles r
@@ -282,8 +271,7 @@ router.post("/login-otp", (req, res) => {
               role_id,
               role
             });
-
-            // remove OTP after use
+ 
             delete otpStore[key];
 
             return res.json({
@@ -325,14 +313,13 @@ router.post("/otp", (req, res) => {
 
     if (results.length > 0) {
       const otp = Math.floor(100000 + Math.random() * 900000);
-      otpStore[value] = otp;
-      // NOTE: In production send OTP via SMS/Email; do not return it in response.
+      otpStore[value] = otp; 
     }
 
     return res.json({
       status: true,
       message: "If the account exists, an OTP will be sent",
-      otp: otpStore[value] // for development only
+      otp: otpStore[value] 
     });
   });
 });
@@ -347,36 +334,55 @@ router.put("/update", verifyToken, (req, res) => {
   email = email ? email.trim() : "";
   password = password ? password.trim() : "";
 
-  db.query("SELECT status FROM users WHERE id = ?", [userId], (err, result) => {
+  const nameRegex = /^[A-Za-z\s]+$/;
+  const phoneRegex = /^[0-9]{10}$/;
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  db.query("SELECT status, email, phone_number FROM users WHERE id = ?", [userId], (err, result) => {
     if (err) return res.status(500).json({ status: false, message: "Database error", error: err.message });
     if (!result || result.length === 0) return res.status(404).json({ status: false, message: "User not found" });
 
-    const userStatus = result[0].status;
+    const user = result[0];
+    const userStatus = user.status;
+
     if (userStatus === "inactive" || userStatus === "deactive") {
       return res.status(403).json({ status: false, message: "Your account is deactivated. Please activate to update your profile." });
     }
     if (userStatus === "blocked") {
       return res.status(403).json({ status: false, message: "Your account is blocked. Contact admin." });
     }
+ 
+    const errors = [];
+    if (!name) errors.push("Name is required");
+    if (name && (name.length < 3 || name.length > 50)) errors.push("Name must be between 3 and 50 characters");
+    if (name && !nameRegex.test(name)) errors.push("Name can only contain letters and spaces");
 
-    // Validate input fields
-    if (!name) return res.status(400).json({ status: false, message: "Name is required" });
-    if (name.length < 3 || name.length > 50) return res.status(400).json({ status: false, message: "Name must be between 3 and 50 characters" });
-    if (!nameRegex.test(name)) return res.status(400).json({ status: false, message: "Name can only contain letters and spaces" });
+    if (!phone_number) errors.push("Phone number is required");
+    if (phone_number && !phoneRegex.test(phone_number)) errors.push("Phone number must be 10 digits");
 
-    if (!phone_number) return res.status(400).json({ status: false, message: "Phone number is required" });
-    if (!phoneRegex.test(phone_number)) return res.status(400).json({ status: false, message: "Phone number must be 10 digits" });
+    if (!email) errors.push("Email is required");
+    if (email && !emailRegex.test(email)) errors.push("Invalid email format");
 
-    if (!email) return res.status(400).json({ status: false, message: "Email is required" });
-    if (!emailRegex.test(email)) return res.status(400).json({ status: false, message: "Invalid email format" });
+    if (!password) errors.push("Password is required");
+    if (password && password.length < 6) errors.push("Password must be at least 6 characters long");
 
-    if (!password) return res.status(400).json({ status: false, message: "Password is required" });
-    if (password.length < 6) return res.status(400).json({ status: false, message: "Password must be at least 6 characters long" });
+    if (errors.length > 0) return res.status(400).json({ status: false, messages: errors });
 
     const hashed = bcrypt.hashSync(password, 10);
-    const sql = `UPDATE users SET name = ?, phone_number = ?, email = ?, password = ? WHERE id = ?`;
+ 
+    const emailChanged = email !== user.email;
+    const phoneChanged = phone_number !== user.phone_number;
 
-    db.query(sql, [name, phone_number, email, hashed, userId], (updateErr) => {
+    let sql = "UPDATE users SET name = ?, phone_number = ?, email = ?, password = ?";
+    const params = [name, phone_number, email, hashed];
+
+    if (emailChanged) sql += ", email_verify = 0";
+    if (phoneChanged) sql += ", phone_verify = 0";
+
+    sql += " WHERE id = ?";
+    params.push(userId);
+
+    db.query(sql, params, (updateErr) => {
       if (updateErr) {
         if (updateErr.code === "ER_DUP_ENTRY") {
           return res.status(409).json({ status: false, message: "Email already exists" });
@@ -385,7 +391,8 @@ router.put("/update", verifyToken, (req, res) => {
       }
 
       db.query(
-        `SELECT u.id, u.name, u.email, u.phone_number, r.id AS role_id, r.name AS role
+        `SELECT u.id, u.name, u.email, u.phone_number, u.email_verify, u.phone_verify,
+                r.id AS role_id, r.name AS role
          FROM users u
          LEFT JOIN user_roles ur ON ur.user_id = u.id
          LEFT JOIN roles r ON r.id = ur.role_id

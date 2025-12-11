@@ -29,12 +29,19 @@ router.get("/profile", verifyToken, (req, res) => {
 
             const user = results[0];
 
-            if (user.status === "inactive") {
+            if (user.status === 2) {
                 return res.status(403).json({
                     status: false,
                     messages: [
                         "Account is deactivated. Please login using OTP to activate."
                     ],
+                    data: []
+                });
+            }
+            if (user.status === 0) {
+                return res.status(403).json({
+                    status: false,
+                    messages: ["Account is blocked. Contact support."],
                     data: []
                 });
             }
@@ -47,6 +54,7 @@ router.get("/profile", verifyToken, (req, res) => {
                         name: user.name,
                         email: user.email,
                         phone_number: user.phone_number,
+                        status: user.status
                     }
                 ]
             });
@@ -68,7 +76,7 @@ router.put("/deactivate", verifyToken, (req, res) => {
     }
 
     db.query(
-        "UPDATE users SET status = 'inactive' WHERE id = ?",
+        "UPDATE users SET status = 2 WHERE id = ?",
         [userId],
         (err, result) => {
             if (err) {

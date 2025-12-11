@@ -2,9 +2,12 @@ import express from "express";
 import { verifyToken } from "../middleware/auth.js";
 import bcrypt from "bcryptjs";
 import db from "../config/db.js";
+
 const router = express.Router();
- 
-// ========================= List User =========================
+
+/* ========================================================
+   LIST USERS
+======================================================== */
 router.get("/users", verifyToken, (req, res) => {
   if (req.user.role !== "admin") {
     return res.status(403).json({ status: false, message: "Access denied" });
@@ -18,7 +21,6 @@ router.get("/users", verifyToken, (req, res) => {
   `;
   const params = [];
 
-  // Check if role_id query param exists
   if (req.query.role_id) {
     sql += " WHERE ur.role_id = ?";
     params.push(req.query.role_id);
@@ -26,69 +28,162 @@ router.get("/users", verifyToken, (req, res) => {
 
   db.query(sql, params, (err, results) => {
     if (err) {
-      return res.status(500).json({ status: false, message: "Database error", error: err.message });
+      return res.status(500).json({
+        status: false,
+        message: "Database error",
+        error: err.message
+      });
     }
-    return res.json({ status: true, message: "Users fetched successfully", data: results });
+    return res.json({
+      status: true,
+      message: "Users fetched successfully",
+      data: results
+    });
   });
 });
 
-// ========================= Create User =========================
-router.post("/create", verifyToken, (req, res) => { 
+/* ========================================================
+   CREATE USER
+======================================================== */
+router.post("/create", verifyToken, (req, res) => {
   if (req.user.role !== "admin") {
-    return res.status(403).json({ status: false, message: "Access denied" });
+    return res.status(403).json({
+      status: false,
+      messages: ["Access denied"]
+    });
   }
-  const { name, email, password, phone_number, role_id } = req.body;
 
-  if (!name || !email || !password || !role_id) {
-    return res.status(400).json({ status: false, message: "Name, email, password, and role_id are required" });
+  const { name, email, password, phone_number, role_id, status } = req.body;
+
+  const errors = [];
+
+  // === VALIDATIONS ===
+  if (!name || name.trim().length < 3 || name.trim().length > 50)
+    errors.push("Name must be between 3 and 50 characters");
+  if (name && !/^[A-Za-z\s]+$/.test(name))
+    errors.push("Name can only contain letters and spaces");
+
+  if (!email)
+    errors.push("Email is required");
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+    errors.push("Invalid email format");
+
+  if (!password)
+    errors.push("Password is required");
+  if (password && password.length < 6)
+    errors.push("Password must be at least 6 characters long");
+
+  if (!phone_number)
+    errors.push("Phone number is required");
+  if (phone_number && !/^[0-9]{10}$/.test(phone_number))
+    errors.push("Phone number must be 10 digits");
+
+  if (!role_id)
+    errors.push("Role ID is required");
+
+  if (status === undefined)
+    errors.push("Status is required");
+
+  // Convert string → int (example: "0" → 0)
+  const finalStatus = parseInt(status);
+
+  if (![0, 1, 2].includes(finalStatus))
+    errors.push("Status must be 0 (blocked), 1 (active), or 2 (inactive)");
+
+  if (errors.length > 0) {
+    return res.status(400).json({
+      status: false,
+      messages: errors
+    });
   }
-  const hashed = bcrypt.hashSync(password, 10);
+
+  // === CHECK DUPLICATE EMAIL OR PHONE ===
   db.query(
-    "INSERT INTO users (name, email, password, phone_number) VALUES (?, ?, ?, ?)",
-    [name, email, hashed, phone_number],
-    (err, result) => {
-      if (err) { 
-        if (err.code === "ER_DUP_ENTRY") {
-          return res.status(409).json({ status: false, message: "Email already exists" });
-        }
-        return res.status(500).json({ status: false, message: "Database error", error: err.message });
+    "SELECT id, email, phone_number FROM users WHERE email = ? OR phone_number = ?",
+    [email, phone_number],
+    (err, rows) => {
+      if (err) {
+        return res.status(500).json({
+          status: false,
+          messages: ["Database error"]
+        });
       }
-      const userId = result.insertId;
+
+      const duplicateErrors = [];
+      rows.forEach((u) => {
+        if (u.email === email) duplicateErrors.push("Email already exists");
+        if (u.phone_number === phone_number) duplicateErrors.push("Phone number already exists");
+      });
+
+      if (duplicateErrors.length > 0) {
+        return res.status(400).json({
+          status: false,
+          messages: [...new Set(duplicateErrors)]
+        });
+      }
+
+      // === HASH PASSWORD ===
+      const hashed = bcrypt.hashSync(password, 10);
+
+      // === INSERT USER ===
       db.query(
-        "INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)",
-        [userId, role_id],
-        (err2) => {
+        "INSERT INTO users (name, email, password, phone_number, status) VALUES (?, ?, ?, ?, ?)",
+        [name, email, hashed, phone_number, finalStatus],
+        (err2, result) => {
           if (err2) {
-            return res.status(500).json({ status: false, message: "Database error", error: err2.message });
+            return res.status(500).json({
+              status: false,
+              messages: ["Database error"]
+            });
           }
+
+          const userId = result.insertId;
+
+          // === ASSIGN ROLE ===
           db.query(
-            "SELECT name AS role FROM roles WHERE id = ?",
-            [role_id],
-            (err3, roleRes) => {
+            "INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)",
+            [userId, role_id],
+            (err3) => {
               if (err3) {
-                return res.status(500).json({ status: false, message: "Database error", error: err3.message });
+                return res.status(500).json({
+                  status: false,
+                  messages: ["Database error"]
+                });
               }
-              const roleName = roleRes[0]?.role || null;
-              return res.status(201).json({
-                status: true,
-                message: "User created successfully",
-                data: { 
-                  userId,
-                  name, 
-                  email, 
-                  phone_number, 
-                  role_id, 
-                  role: roleName 
+
+              // === GET ROLE NAME ===
+              db.query(
+                "SELECT name AS role FROM roles WHERE id = ?",
+                [role_id],
+                (err4, roleRes) => {
+                  const roleName = roleRes?.[0]?.role || null;
+
+                  return res.status(201).json({
+                    status: true,
+                    message: "User created successfully",
+                    data: {
+                      id: userId,
+                      name,
+                      email,
+                      phone_number,
+                      role_id,
+                      role: roleName,
+                      status: finalStatus
+                    }
+                  });
                 }
-              });
+              );
             }
           );
         }
       );
     }
   );
-}); 
-// ========================= Update User =========================
+});
+
+/* ========================================================
+   UPDATE USER
+======================================================== */
 router.put("/update/:id", verifyToken, (req, res) => {
   if (req.user.role !== "admin") {
     return res.status(403).json({ status: false, message: "Access denied" });
@@ -97,15 +192,16 @@ router.put("/update/:id", verifyToken, (req, res) => {
   const userId = req.params.id;
   const { name, email, phone_number, password, role_id, status } = req.body;
 
-  // Basic validations
   const errors = [];
 
+  // === VALIDATIONS ===
   if (!name || name.trim().length < 3 || name.trim().length > 50)
     errors.push("Name must be between 3 and 50 characters");
   if (!/^[A-Za-z\s]+$/.test(name)) errors.push("Name can only contain letters and spaces");
 
   if (!email) errors.push("Email is required");
-  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.push("Invalid email format");
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+    errors.push("Invalid email format");
 
   if (!phone_number) errors.push("Phone number is required");
   if (phone_number && !/^[0-9]{10}$/.test(phone_number))
@@ -113,16 +209,24 @@ router.put("/update/:id", verifyToken, (req, res) => {
 
   if (!role_id) errors.push("Role ID is required");
 
-  if (status && !["active", "blocked"].includes(status))
-    errors.push("Status must be 'active' or 'blocked'");
-
-  if (password && password.length < 6) errors.push("Password must be at least 6 characters long");
-
-  if (errors.length > 0) {
-    return res.status(400).json({ status: false, messages: errors });
+  // Convert "0", "1", "2" to number
+  let finalStatus = status;
+  if (typeof finalStatus === "string") {
+    finalStatus = parseInt(finalStatus);
   }
 
-  // Check duplicates for email & phone excluding current user
+  // Validate status
+  if (finalStatus !== undefined && ![0, 1, 2].includes(finalStatus)) {
+    errors.push("Status must be 0 (blocked), 1 (active), or 2 (inactive)");
+  }
+
+  if (password && password.length < 6)
+    errors.push("Password must be at least 6 characters long");
+
+  if (errors.length > 0)
+    return res.status(400).json({ status: false, messages: errors });
+
+  // === CHECK DUPLICATES ===
   db.query(
     "SELECT id, email, phone_number FROM users WHERE (email = ? OR phone_number = ?) AND id != ?",
     [email, phone_number, userId],
@@ -134,43 +238,38 @@ router.put("/update/:id", verifyToken, (req, res) => {
         if (u.email === email) duplicateErrors.push("Email already exists");
         if (u.phone_number === phone_number) duplicateErrors.push("Phone number already exists");
       });
+
       if (duplicateErrors.length > 0)
         return res.status(400).json({ status: false, messages: [...new Set(duplicateErrors)] });
 
-      // Build update query dynamically
-      const fieldsToUpdate = [name, email, phone_number];
-      let sql = "UPDATE users SET name = ?, email = ?, phone_number = ?";
+      // === BUILD UPDATE QUERY ===
+      const fields = [name, email, phone_number];
+      let sql = "UPDATE users SET name = ?, email = ?, phone_number = ?, email_verify = 0, phone_verify = 0";
 
       if (password) {
         sql += ", password = ?";
-        fieldsToUpdate.push(bcrypt.hashSync(password, 10));
+        fields.push(bcrypt.hashSync(password, 10));
       }
 
-      if (status) {
+      if (finalStatus !== undefined) {
         sql += ", status = ?";
-        fieldsToUpdate.push(status);
+        fields.push(finalStatus);
       }
 
       sql += " WHERE id = ?";
-      fieldsToUpdate.push(userId);
+      fields.push(userId);
 
-      db.query(sql, fieldsToUpdate, (err2) => {
+      db.query(sql, fields, (err2) => {
         if (err2) return res.status(500).json({ status: false, message: "Database error" });
 
-        // Update user role
+        // Update role
         db.query("UPDATE user_roles SET role_id = ? WHERE user_id = ?", [role_id, userId], (err3) => {
           if (err3) return res.status(500).json({ status: false, message: "Database error" });
 
-          // Get role name
           db.query("SELECT name AS role FROM roles WHERE id = ?", [role_id], (err4, roleRes) => {
-            if (err4) return res.status(500).json({ status: false, message: "Database error" });
+            const roleName = roleRes?.[0]?.role || null;
 
-            const roleName = roleRes[0]?.role || null;
-
-            // Return updated user data
             db.query("SELECT * FROM users WHERE id = ?", [userId], (err5, userRes) => {
-              if (err5) return res.status(500).json({ status: false, message: "Database error" });
-
               return res.json({
                 status: true,
                 message: "User updated successfully",
@@ -182,7 +281,9 @@ router.put("/update/:id", verifyToken, (req, res) => {
                   role_id,
                   role: roleName,
                   status: userRes[0].status,
-                },
+                  email_verify: userRes[0].email_verify,
+                  phone_verify: userRes[0].phone_verify
+                }
               });
             });
           });
@@ -192,84 +293,65 @@ router.put("/update/:id", verifyToken, (req, res) => {
   );
 });
 
-// ========================= Delete User =========================
+/* ========================================================
+   DELETE USER
+======================================================== */
 router.delete("/delete/:id", verifyToken, (req, res) => {
   if (req.user.role !== "admin") {
     return res.status(403).json({ status: false, message: "Access denied" });
   }
 
   const userId = req.params.id;
- 
+
   if (req.user.id == userId) {
-    return res.status(400).json({
-      status: false,
-      message: "Cannot delete your own account"
-    });
+    return res.status(400).json({ status: false, message: "Cannot delete your own account" });
   }
 
   db.query("DELETE FROM users WHERE id = ?", [userId], (err, result) => {
-    if (err) {
-      return res.status(500).json({ status: false, message: "Database error", error: err.message });
-    }
+    if (err)
+      return res.status(500).json({ status: false, message: "Database error" });
 
-    if (result.affectedRows === 0) {
+    if (result.affectedRows === 0)
       return res.status(404).json({ status: false, message: "User not found" });
-    }
 
     return res.json({ status: true, message: "User deleted successfully", user: { userId } });
   });
 });
 
-// ========================= Block User =========================
+/* ========================================================
+   BLOCK / UNBLOCK USER
+======================================================== */
 router.put("/block/:id", verifyToken, (req, res) => {
-  // Only admin can block
   if (req.user.role !== "admin") {
-    return res.status(403).json({
-      status: false,
-      messages: ["Access denied"],
-      data: []
-    });
+    return res.status(403).json({ status: false, messages: ["Access denied"] });
   }
 
   const userId = req.params.id;
 
-  // Admin cannot block themselves
   if (req.user.id == userId) {
-    return res.status(400).json({
-      status: false,
-      messages: ["Cannot block own account"],
-      data: []
-    });
+    return res.status(400).json({ status: false, messages: ["Cannot block own account"] });
   }
 
   const { block } = req.body;
 
-  // Validate value
   if (typeof block !== "boolean") {
     return res.status(400).json({
       status: false,
-      messages: ["`block` must be true or false"],
-      data: []
+      messages: ["`block` must be true or false"]
     });
   }
 
-  // Update status
   db.query(
     "UPDATE users SET status = ? WHERE id = ?",
-    [block ? "blocked" : "active", userId],
-    (err, result) => {
-      if (err) {
-        return res.status(500).json({
-          status: false,
-          messages: ["Database error"],
-          data: []
-        });
-      }
+    [block ? 0 : 1, userId],
+    (err) => {
+      if (err)
+        return res.status(500).json({ status: false, messages: ["Database error"] });
 
       return res.json({
         status: true,
         messages: [`User ${block ? "blocked" : "unblocked"} successfully`],
-        data: [{ id: userId, status: block ? "blocked" : "active" }]
+        data: [{ id: userId, status: block ? 0 : 1 }]
       });
     }
   );
