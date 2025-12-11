@@ -214,44 +214,84 @@ router.post("/login", (req, res) => {
     );
   }
 });
+// ========================= GENERATE OTP =========================
+router.post("/otp", (req, res) => {
+  let { email, phone_number } = req.body || {};
+  email = email?.trim() || "";
+  phone_number = phone_number?.trim() || "";
+
+  if (!email && !phone_number)
+    return res.status(400).json({ status: false, message: "Email or phone number is required" });
+  if (phone_number && !phoneRegex.test(phone_number))
+    return res.status(400).json({ status: false, message: "Phone number must be 10 digits" });
+  if (email && !emailRegex.test(email))
+    return res.status(400).json({ status: false, message: "Invalid email format" });
+
+  const key = email || phone_number;
+  const now = Date.now();
+
+  // Check if user exists
+  const query = email ? "SELECT * FROM users WHERE email = ?" : "SELECT * FROM users WHERE phone_number = ?";
+  db.query(query, [key], (err, results) => {
+    if (err) return res.status(500).json({ status: false, message: "Something went wrong" });
+
+    // Only generate OTP if user exists
+    if (results.length > 0) {
+      // Reuse existing OTP if still valid
+      if (otpStore[key] && otpStore[key].expiresAt > now) {
+        return res.json({ status: true, message: "If the account exists, an OTP will be sent", otp: otpStore[key].otp });
+      }
+
+      // Generate new OTP
+      const otp = Math.floor(100000 + Math.random() * 900000);
+      otpStore[key] = { otp, expiresAt: now + 30 * 1000 }; // expires in 30 seconds
+      return res.json({ status: true, message: "If the account exists, an OTP will be sent", otp });
+    }
+ 
+    return res.json({ status: true, message: "If the account exists, an OTP will be sent" });
+  });
+});
 
 // ========================= LOGIN OTP =========================
 router.post("/login-otp", (req, res) => {
   let { email, phone_number, otp } = req.body || {};
-  email = email ? email.trim() : "";
-  phone_number = phone_number ? phone_number.trim() : "";
-  otp = otp ? otp.toString().trim() : "";
- 
-  if (!email && !phone_number) 
+  email = email?.trim() || "";
+  phone_number = phone_number?.trim() || "";
+  otp = otp?.toString().trim() || "";
+
+  if (!email && !phone_number)
     return res.status(400).json({ status: false, message: "Email or phone number is required" });
-  if (!otp) 
+  if (!otp)
     return res.status(400).json({ status: false, message: "OTP is required" });
 
   const key = email || phone_number;
-  if (!otpStore[key] || otpStore[key].toString() !== otp.toString()) {
+  const stored = otpStore[key];
+
+  if (!stored || stored.otp.toString() !== otp.toString())
     return res.status(401).json({ status: false, message: "Invalid OTP" });
+
+  if (stored.expiresAt < Date.now()) {
+    delete otpStore[key];
+    return res.status(401).json({ status: false, message: "OTP expired, request a new one" });
   }
 
   const query = email ? "SELECT * FROM users WHERE email = ?" : "SELECT * FROM users WHERE phone_number = ?";
   db.query(query, [key], (err, results) => {
     if (err) return res.status(500).json({ status: false, message: "Database error" });
-    if (results.length === 0) return res.status(404).json({ status: false, message: "Account not found, please register first" });
+    if (!results.length) return res.status(404).json({ status: false, message: "Account not found, please register first" });
 
     const user = results[0];
-    const uStatus = Number(user.status);  
- 
-    if (uStatus === 0) {
+    if (Number(user.status) === 0)
       return res.status(403).json({ status: false, message: "Your account has been blocked. Contact admin." });
-    }
- 
-    const newStatus = (uStatus === 2) ? 1 : uStatus;
+
+    const newStatus = Number(user.status) === 2 ? 1 : Number(user.status);
 
     db.query(
       `UPDATE users SET ${email ? "email_verify" : "phone_verify"} = 1, status = ? WHERE id = ?`,
       [newStatus, user.id],
       (errUpdate) => {
         if (errUpdate) return res.status(500).json({ status: false, message: "Database error" });
- 
+
         db.query(
           `SELECT r.id AS role_id, r.name AS role
            FROM roles r
@@ -260,18 +300,18 @@ router.post("/login-otp", (req, res) => {
           [user.id],
           (err2, roleResults) => {
             if (err2) return res.status(500).json({ status: false, message: "Database error" });
-            if (!roleResults || roleResults.length === 0) return res.status(403).json({ status: false, message: "User has no assigned role" });
+            if (!roleResults.length)
+              return res.status(403).json({ status: false, message: "User has no assigned role" });
 
             const { role_id, role } = roleResults[0];
-
             const token = generateToken({
               id: user.id,
               email: user.email,
               phone_number: user.phone_number,
               role_id,
-              role
+              role,
             });
- 
+
             delete otpStore[key];
 
             return res.json({
@@ -285,42 +325,13 @@ router.post("/login-otp", (req, res) => {
                 phone_number: user.phone_number,
                 role_id,
                 role,
-                status: newStatus
-              }
+                status: newStatus,
+              },
             });
           }
         );
       }
     );
-  });
-});
-
-// ========================= GENERATE OTP =========================
-router.post("/otp", (req, res) => {
-  let { email, phone_number } = req.body || {};
-  email = email ? email.trim() : "";
-  phone_number = phone_number ? phone_number.trim() : "";
-
-  if (!email && !phone_number) return res.status(400).json({ status: false, message: "Email or phone number is required" });
-  if (phone_number && !phoneRegex.test(phone_number)) return res.status(400).json({ status: false, message: "Phone number must be 10 digits" });
-  if (email && !emailRegex.test(email)) return res.status(400).json({ status: false, message: "Invalid email format" });
-
-  const query = email ? "SELECT * FROM users WHERE email = ?" : "SELECT * FROM users WHERE phone_number = ?";
-  const value = email || phone_number;
-
-  db.query(query, [value], (err, results) => {
-    if (err) return res.status(500).json({ status: false, message: "Something went wrong" });
-
-    if (results.length > 0) {
-      const otp = Math.floor(100000 + Math.random() * 900000);
-      otpStore[value] = otp; 
-    }
-
-    return res.json({
-      status: true,
-      message: "If the account exists, an OTP will be sent",
-      otp: otpStore[value] 
-    });
   });
 });
 

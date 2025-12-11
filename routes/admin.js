@@ -13,42 +13,83 @@ router.get("/users", verifyToken, (req, res) => {
     return res.status(403).json({ status: false, message: "Access denied" });
   }
 
-  let sql = `
-    SELECT u.status, u.id, u.name, u.email, u.phone_number, ur.role_id, r.name AS role
+  // Pagination params
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const offset = (page - 1) * limit;
+
+  let baseSql = `
     FROM users u
     LEFT JOIN user_roles ur ON ur.user_id = u.id
     LEFT JOIN roles r ON r.id = ur.role_id
   `;
-  
+
   const conditions = [];
   const params = [];
- 
+
+  // Filter by role
   if (req.query.role_id) {
     conditions.push("ur.role_id = ?");
     params.push(req.query.role_id);
   }
- 
+
+  // Filter by status (0,1,2)
   if (req.query.status) {
     conditions.push("u.status = ?");
     params.push(req.query.status);
   }
- 
+
+  // Add WHERE if needed
   if (conditions.length > 0) {
-    sql += " WHERE " + conditions.join(" AND ");
+    baseSql += " WHERE " + conditions.join(" AND ");
   }
 
-  db.query(sql, params, (err, results) => {
+  // 1️⃣ Count total users (after applying filters)
+  const countSql = `SELECT COUNT(*) AS total ${baseSql}`;
+
+  db.query(countSql, params, (err, countResult) => {
     if (err) {
       return res.status(500).json({
         status: false,
-        message: "Database error",
-        error: err.message
+        message: "Database error (count)",
+        error: err.message,
       });
     }
-    return res.json({
-      status: true,
-      message: "Users fetched successfully",
-      data: results
+
+    const totalItems = countResult[0].total;
+    const totalPages = Math.ceil(totalItems / limit);
+
+    // 2️⃣ Fetch paginated data
+    const dataSql = `
+      SELECT 
+        u.status, u.id, u.name, u.email, u.phone_number,
+        ur.role_id, r.name AS role
+      ${baseSql}
+      LIMIT ? OFFSET ?
+    `;
+
+    const finalParams = [...params, limit, offset];
+
+    db.query(dataSql, finalParams, (err2, results) => {
+      if (err2) {
+        return res.status(500).json({
+          status: false,
+          message: "Database error (data fetch)",
+          error: err2.message,
+        });
+      }
+
+      return res.json({
+        status: true,
+        message: "Users fetched successfully",
+        pagination: {
+          page,
+          limit,
+          totalItems,
+          totalPages
+        },
+        data: results
+      });
     });
   });
 });
