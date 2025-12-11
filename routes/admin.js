@@ -19,11 +19,22 @@ router.get("/users", verifyToken, (req, res) => {
     LEFT JOIN user_roles ur ON ur.user_id = u.id
     LEFT JOIN roles r ON r.id = ur.role_id
   `;
+  
+  const conditions = [];
   const params = [];
-
+ 
   if (req.query.role_id) {
-    sql += " WHERE ur.role_id = ?";
+    conditions.push("ur.role_id = ?");
     params.push(req.query.role_id);
+  }
+ 
+  if (req.query.status) {
+    conditions.push("u.status = ?");
+    params.push(req.query.status);
+  }
+ 
+  if (conditions.length > 0) {
+    sql += " WHERE " + conditions.join(" AND ");
   }
 
   db.query(sql, params, (err, results) => {
