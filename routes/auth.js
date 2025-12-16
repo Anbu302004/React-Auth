@@ -12,35 +12,29 @@ const phoneRegex = /^[0-9]{10}$/;
 const nameRegex = /^[A-Za-z\s]+$/;
 
 // ========================= SESSION CREATION =========================
-export async function createSession(userId, req) {
-  const token = uuidv4(); // generate token for auth
-  const token_id = null;   // keep token_id null
-
-  // Get user IP
+export async function createSession(userId, req) { 
+  const token = uuidv4();
+ 
   const ip =
     req.headers["x-forwarded-for"]?.split(",")[0] ||
     req.socket.remoteAddress ||
     "unknown";
-
-  // Get device info
+ 
   const device = req.headers["user-agent"] || "unknown";
-
-  // Insert new session with token_id as NULL, token used for authentication
+ 
   await db.query(
     `INSERT INTO user_details
      (user_id, token_id, profile_id, token, ip_address, device, last_login)
-     VALUES (?, ?, NULL, ?, ?, ?, NOW())`,
-    [userId, token_id, token, ip, device]
+     VALUES (?, NULL, NULL, ?, ?, ?, NOW())`,
+    [userId, token, ip, device]
   );
-
-  // Optional: Cleanup old sessions older than 3 months
+ 
   await db.query(
     `DELETE FROM user_details WHERE last_login < NOW() - INTERVAL 3 MONTH`
   );
 
-  return token; // return token to use for auth
+  return token;  
 }
-
 // ========================= REGISTER =========================
 router.post("/register", async (req, res) => {
   try {
