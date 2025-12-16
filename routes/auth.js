@@ -13,7 +13,8 @@ const nameRegex = /^[A-Za-z\s]+$/;
 
 // ========================= SESSION CREATION =========================
 export async function createSession(userId, req) {
-  const token_id = uuidv4();
+  const token = uuidv4(); // generate token for auth
+  const token_id = null;   // keep token_id null
 
   // Get user IP
   const ip =
@@ -24,20 +25,20 @@ export async function createSession(userId, req) {
   // Get device info
   const device = req.headers["user-agent"] || "unknown";
 
-  // Insert new session without deleting old tokens
+  // Insert new session with token_id as NULL, token used for authentication
   await db.query(
     `INSERT INTO user_details
      (user_id, token_id, profile_id, token, ip_address, device, last_login)
      VALUES (?, ?, NULL, ?, ?, ?, NOW())`,
-    [userId, token_id, token_id, ip, device]
+    [userId, token_id, token, ip, device]
   );
 
-  // Optional: Cleanup old tokens older than 3 months (automatically)
+  // Optional: Cleanup old sessions older than 3 months
   await db.query(
     `DELETE FROM user_details WHERE last_login < NOW() - INTERVAL 3 MONTH`
   );
 
-  return token_id;
+  return token; // return token to use for auth
 }
 
 // ========================= REGISTER =========================
