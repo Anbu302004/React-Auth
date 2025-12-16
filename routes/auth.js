@@ -125,18 +125,37 @@ router.post("/login", async (req, res) => {
     let { email, password } = req.body || {};
     email = email?.trim() || "";
     password = password?.trim() || "";
-    if (!email || !password) return res.status(400).json({ status: false, message: "Email and password are required" });
 
-    const [results] = await db.query("SELECT * FROM users WHERE email = ?", [email]);
-    if (!results.length) return res.status(401).json({ status: false, message: "Incorrect email or password" });
+    if (!email || !password)
+      return res.status(400).json({ status: false, message: "Email and password are required" });
+
+    const [results] = await db.query(
+      "SELECT * FROM users WHERE email = ?",
+      [email]
+    );
+
+    if (!results.length)
+      return res.status(401).json({ status: false, message: "Incorrect email or password" });
 
     const user = results[0];
     const validPassword = await bcrypt.compare(password, user.password);
-    if (!validPassword) return res.status(401).json({ status: false, message: "Incorrect email or password" });
 
-    if (Number(user.status) === 0) return res.status(403).json({ status: false, message: "Your account has been blocked. Contact admin." });
+    if (!validPassword)
+      return res.status(401).json({ status: false, message: "Incorrect email or password" });
 
-    // Get role
+    // 🚫 Blocked
+    if (Number(user.status) === 0)
+      return res.status(403).json({
+        status: false,
+        message: "Your account has been blocked. Contact admin."
+      });
+
+    // ✅ Auto-activate if deactivated
+    if (Number(user.status) === 2) {
+      await db.query("UPDATE users SET status = 1 WHERE id = ?", [user.id]);
+      user.status = 1;
+    }
+
     const [roleResults] = await db.query(
       `SELECT r.id AS role_id, r.name AS role
        FROM roles r
@@ -144,7 +163,9 @@ router.post("/login", async (req, res) => {
        WHERE ur.user_id = ?`,
       [user.id]
     );
-    if (!roleResults.length) return res.status(403).json({ status: false, message: "User has no assigned role" });
+
+    if (!roleResults.length)
+      return res.status(403).json({ status: false, message: "User has no assigned role" });
 
     const { role_id, role } = roleResults[0];
     const token = await createSession(user.id, req);
@@ -168,6 +189,7 @@ router.post("/login", async (req, res) => {
     return res.status(500).json({ status: false, message: "Server error" });
   }
 });
+
 
 // ========================= GENERATE OTP =========================
 router.post("/otp", async (req, res) => {
@@ -204,28 +226,48 @@ router.post("/otp", async (req, res) => {
 });
 
 // ========================= LOGIN OTP =========================
-router.post("/login-otp", async (req, res) => {
+ router.post("/login-otp", async (req, res) => {
   try {
     let { email, phone_number, otp } = req.body || {};
     email = email?.trim();
     phone_number = phone_number?.trim();
     otp = otp?.toString()?.trim();
 
-    if (!email && !phone_number) return res.status(400).json({ status: false, message: "Email or phone number is required" });
-    if (!otp) return res.status(400).json({ status: false, message: "OTP is required" });
+    if (!email && !phone_number)
+      return res.status(400).json({ status: false, message: "Email or phone number is required" });
+    if (!otp)
+      return res.status(400).json({ status: false, message: "OTP is required" });
 
     const key = email || phone_number;
     const stored = otpStore[key];
 
-    if (!stored || stored.otp.toString() !== otp) return res.status(401).json({ status: false, message: "Invalid OTP" });
-    if (stored.expiresAt < Date.now()) { delete otpStore[key]; return res.status(401).json({ status: false, message: "OTP expired, request a new one" }); }
+    if (!stored || stored.otp.toString() !== otp)
+      return res.status(401).json({ status: false, message: "Invalid OTP" });
 
-    const query = email ? "SELECT * FROM users WHERE email = ?" : "SELECT * FROM users WHERE phone_number = ?";
+    if (stored.expiresAt < Date.now()) {
+      delete otpStore[key];
+      return res.status(401).json({ status: false, message: "OTP expired, request a new one" });
+    }
+
+    const query = email
+      ? "SELECT * FROM users WHERE email = ?"
+      : "SELECT * FROM users WHERE phone_number = ?";
     const [results] = await db.query(query, [key]);
-    if (!results.length) return res.status(404).json({ status: false, message: "Account not found, please register first" });
+
+    if (!results.length)
+      return res.status(404).json({ status: false, message: "Account not found, please register first" });
 
     const user = results[0];
-    if (Number(user.status) === 0) return res.status(403).json({ status: false, message: "Your account has been blocked. Contact admin." });
+
+    // 🚫 Blocked
+    if (Number(user.status) === 0)
+      return res.status(403).json({ status: false, message: "Your account has been blocked. Contact admin." });
+
+    // ✅ Auto-activate if deactivated
+    if (Number(user.status) === 2) {
+      await db.query("UPDATE users SET status = 1 WHERE id = ?", [user.id]);
+      user.status = 1;
+    }
 
     const [roleResults] = await db.query(
       `SELECT r.id AS role_id, r.name AS role
@@ -234,18 +276,21 @@ router.post("/login-otp", async (req, res) => {
        WHERE ur.user_id = ?`,
       [user.id]
     );
-    if (!roleResults.length) return res.status(403).json({ status: false, message: "User has no assigned role" });
+
+    if (!roleResults.length)
+      return res.status(403).json({ status: false, message: "User has no assigned role" });
 
     const { role_id, role } = roleResults[0];
     const token = await createSession(user.id, req);
 
-     if (email) {
-        await db.query("UPDATE users SET email_verify = 1 WHERE id = ?", [user.id]);
-      } else if (phone_number) {
-        await db.query("UPDATE users SET phone_verify = 1 WHERE id = ?", [user.id]);
-      }
+    if (email) {
+      await db.query("UPDATE users SET email_verify = 1 WHERE id = ?", [user.id]);
+    } else if (phone_number) {
+      await db.query("UPDATE users SET phone_verify = 1 WHERE id = ?", [user.id]);
+    }
 
     delete otpStore[key];
+
     return res.json({
       status: true,
       message: "Logged in successfully",

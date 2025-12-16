@@ -109,6 +109,7 @@ router.delete("/delete", verifyToken, async (req, res) => {
     const userId = req.user.id;
     const userRole = req.user.role;
 
+    // 🚫 Admin restriction (unchanged)
     if (userRole === "admin" || userRole === "subadmin") {
       return res.status(403).json({
         status: false,
@@ -117,6 +118,32 @@ router.delete("/delete", verifyToken, async (req, res) => {
       });
     }
 
+    // 🔍 Check user status first
+    const [userResult] = await db.query(
+      "SELECT status FROM users WHERE id = ?",
+      [userId]
+    );
+
+    if (!userResult.length) {
+      return res.status(404).json({
+        status: false,
+        messages: ["User not found"],
+        data: []
+      });
+    }
+
+    // ❌ If inactive / deactivated
+    if (Number(userResult[0].status) === 2) {
+      return res.status(403).json({
+        status: false,
+        messages: [
+          "Your account is deactivated. Please activate your account before deleting."
+        ],
+        data: []
+      });
+    }
+
+    // ✅ Delete allowed only if active
     const [result] = await db.query(
       "DELETE FROM users WHERE id = ?",
       [userId]
@@ -135,6 +162,7 @@ router.delete("/delete", verifyToken, async (req, res) => {
       messages: ["Your account has been deleted successfully"],
       data: []
     });
+
   } catch (err) {
     console.error(err);
     return res.status(500).json({
@@ -144,5 +172,4 @@ router.delete("/delete", verifyToken, async (req, res) => {
     });
   }
 });
-
 export default router;
