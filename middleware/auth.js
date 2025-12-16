@@ -1,4 +1,3 @@
-// middleware/auth.js
 import db from "../config/db.js";
 
 // Middleware to verify UUID token and attach user info
@@ -60,8 +59,6 @@ export const verifyToken = async (req, res, next) => {
     });
   }
 };
-
-// Logout route
 export const logout = async (req, res) => {
   try {
     const authHeader = req.headers["authorization"];
@@ -74,10 +71,49 @@ export const logout = async (req, res) => {
       });
     }
 
-    const [result] = await db.query(
-      "DELETE FROM user_details WHERE token_id = ?",
-      [token]
-    );
+    const { mode, tokens } = req.body || {};
+    let query = "";
+    let params = [];
+
+    if (mode === "all") {
+      // Logout from all devices (invalidate tokens only)
+      query = `
+        UPDATE user_details
+        SET token_id = NULL, token = NULL
+        WHERE user_id = (
+          SELECT user_id FROM (
+            SELECT user_id FROM user_details WHERE token_id = ?
+          ) t
+        )
+      `;
+      params = [token];
+
+    } else if (mode === "selected") {
+      if (!Array.isArray(tokens) || tokens.length === 0) {
+        return res.status(400).json({
+          status: false,
+          message: "Provide tokens array to logout",
+        });
+      }
+
+      query = `
+        UPDATE user_details
+        SET token_id = NULL, token = NULL
+        WHERE token_id IN (${tokens.map(() => "?").join(",")})
+      `;
+      params = tokens;
+
+    } else {
+      // Current device logout
+      query = `
+        UPDATE user_details
+        SET token_id = NULL, token = NULL
+        WHERE token_id = ?
+      `;
+      params = [token];
+    }
+
+    const [result] = await db.query(query, params);
 
     if (result.affectedRows === 0) {
       return res.status(400).json({
@@ -89,6 +125,8 @@ export const logout = async (req, res) => {
     return res.json({
       status: true,
       message: "Logout successful",
+      mode: mode || "current",
+      count: result.affectedRows,
     });
   } catch (err) {
     console.error("Logout error:", err);
