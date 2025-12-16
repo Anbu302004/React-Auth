@@ -59,6 +59,7 @@ export const verifyToken = async (req, res, next) => {
     });
   }
 };
+ 
 export const logout = async (req, res) => {
   try {
     const authHeader = req.headers["authorization"];
@@ -71,12 +72,12 @@ export const logout = async (req, res) => {
       });
     }
 
-    const { mode, tokens } = req.body || {};
+    const { mode, session_ids } = req.body || {};
     let query = "";
     let params = [];
 
     if (mode === "all") {
-      // Logout from all devices (invalidate tokens only)
+      // Logout from all devices of this user
       query = `
         UPDATE user_details
         SET token_id = NULL, token = NULL
@@ -89,19 +90,20 @@ export const logout = async (req, res) => {
       params = [token];
 
     } else if (mode === "selected") {
-      if (!Array.isArray(tokens) || tokens.length === 0) {
+      // ✅ Use user_details.id instead of token_id
+      if (!Array.isArray(session_ids) || session_ids.length === 0) {
         return res.status(400).json({
           status: false,
-          message: "Provide tokens array to logout",
+          message: "Provide session_ids array to logout",
         });
       }
 
       query = `
         UPDATE user_details
         SET token_id = NULL, token = NULL
-        WHERE token_id IN (${tokens.map(() => "?").join(",")})
+        WHERE id IN (${session_ids.map(() => "?").join(",")})
       `;
-      params = tokens;
+      params = session_ids;
 
     } else {
       // Current device logout
@@ -118,7 +120,7 @@ export const logout = async (req, res) => {
     if (result.affectedRows === 0) {
       return res.status(400).json({
         status: false,
-        message: "Token not found or already logged out",
+        message: "Session not found or already logged out",
       });
     }
 

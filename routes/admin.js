@@ -11,7 +11,7 @@ const router = express.Router();
 router.get("/users", verifyToken, async (req, res) => {
   try {
     if (req.user.role !== "admin") {
-      return res.status(403).json({ status: false, message: "Access denied" });
+      return res.status(403).json({ status: false, message: "Access denied Authroization Required" });
     }
 
     // Pagination params
@@ -74,7 +74,7 @@ router.get("/users", verifyToken, async (req, res) => {
 router.post("/create", verifyToken, async (req, res) => {
   try {
     if (req.user.role !== "admin") {
-      return res.status(403).json({ status: false, messages: ["Access denied"] });
+      return res.status(403).json({ status: false, messages: ["Access denied Authroization Required"] });
     }
 
     const { name, email, password, phone_number, role_id, status } = req.body;
@@ -147,7 +147,7 @@ router.post("/create", verifyToken, async (req, res) => {
 ======================================================== */
 router.put("/update/:id", verifyToken, async (req, res) => {
   try {
-    if (req.user.role !== "admin") return res.status(403).json({ status: false, message: "Access denied" });
+    if (req.user.role !== "admin") return res.status(403).json({ status: false, message: "Access denied Authroization Required" });
 
     const userId = req.params.id;
     const { name, email, phone_number, password, role_id, status } = req.body;
@@ -236,7 +236,7 @@ router.put("/update/:id", verifyToken, async (req, res) => {
 ======================================================== */
 router.delete("/delete/:id", verifyToken, async (req, res) => {
   try {
-    if (req.user.role !== "admin") return res.status(403).json({ status: false, message: "Access denied" });
+    if (req.user.role !== "admin") return res.status(403).json({ status: false, message: "Access denied Authroization Required" });
 
     const userId = req.params.id;
     if (req.user.id == userId) return res.status(400).json({ status: false, message: "Cannot delete your own account" });
@@ -257,7 +257,7 @@ router.delete("/delete/:id", verifyToken, async (req, res) => {
 ======================================================== */
 router.put("/block/:id", verifyToken, async (req, res) => {
   try {
-    if (req.user.role !== "admin") return res.status(403).json({ status: false, messages: ["Access denied"] });
+    if (req.user.role !== "admin") return res.status(403).json({ status: false, messages: ["Access denied Authroization Required"] });
 
     const userId = req.params.id;
     if (req.user.id == userId) return res.status(400).json({ status: false, messages: ["Cannot block own account"] });
