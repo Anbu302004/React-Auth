@@ -81,7 +81,7 @@ router.post("/register", async (req, res) => {
 
     // Insert user
     const [result] = await db.query(
-      "INSERT INTO users (name, email, password, phone_number, status) VALUES (?,?,?,?, 'active')",
+      "INSERT INTO users (name, email, password, phone_number, status) VALUES (?,?,?,?, '1')",
       [name, email, hashed, phone_number]
     );
     const userId = result.insertId;
@@ -238,6 +238,12 @@ router.post("/login-otp", async (req, res) => {
 
     const { role_id, role } = roleResults[0];
     const token = await createSession(user.id, req);
+
+     if (email) {
+        await db.query("UPDATE users SET email_verify = 1 WHERE id = ?", [user.id]);
+      } else if (phone_number) {
+        await db.query("UPDATE users SET phone_verify = 1 WHERE id = ?", [user.id]);
+      }
 
     delete otpStore[key];
     return res.json({
