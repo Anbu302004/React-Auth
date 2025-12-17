@@ -177,6 +177,55 @@ router.put("/deactivate", verifyToken, async (req, res) => {
   }
 });
 
+// ========================= Get ALL Active Tokens of Logged-in User =========================
+router.get("/tokens", verifyToken, async (req, res) => {
+  try {
+    const userId = Number(req.user.id);
+
+    if (!userId) {
+      return res.status(400).json({
+        status: false,
+        messages: ["Invalid user"],
+        data: []
+      });
+    }
+
+    const [tokens] = await db.query(
+      `SELECT 
+         id,
+         user_id,
+         token AS token_id,
+         ip_address AS ip,
+         device,
+         created_at
+       FROM user_details
+       WHERE user_id = ?
+       ORDER BY created_at DESC`,
+      [userId]
+    );
+
+    return res.json({
+      status: true,
+      user_id: userId,    
+      count: tokens.length,
+      message:
+        tokens.length === 0
+          ? "No active sessions found"
+          : "Active sessions retrieved successfully",
+      data: tokens
+    });
+
+  } catch (err) {
+    console.error("Get tokens error:", err);
+    return res.status(500).json({
+      status: false,
+      messages: ["Database error"],
+      data: []
+    });
+  }
+});
+ 
+
 // ========================= Delete Profile =========================
 router.delete("/delete", verifyToken, async (req, res) => {
   try {
