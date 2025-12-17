@@ -74,8 +74,7 @@ router.put("/reset-password", verifyToken, async (req, res) => {
         data: []
       });
     }
-
-    // Fetch user password from DB
+ 
     const [results] = await db.query(
       "SELECT password FROM users WHERE id = ?",
       [userId]
