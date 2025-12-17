@@ -1,5 +1,6 @@
 import express from "express";
 import { verifyToken } from "../middleware/auth.js";
+import bcrypt from "bcryptjs";
 import db from "../config/db.js";
 const router = express.Router();
 
@@ -50,6 +51,80 @@ router.get("/profile", verifyToken, async (req, res) => {
         }
       ]
     });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({
+      status: false,
+      messages: ["Database error"],
+      data: []
+    });
+  }
+});
+
+// ========================= Reset Password =========================
+router.put("/reset-password", verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { currentPassword, newPassword, confirmPassword } = req.body;
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      return res.status(400).json({
+        status: false,
+        messages: ["All fields are required"],
+        data: []
+      });
+    }
+
+    // Fetch user password from DB
+    const [results] = await db.query(
+      "SELECT password FROM users WHERE id = ?",
+      [userId]
+    );
+
+    if (!results.length) {
+      return res.status(404).json({
+        status: false,
+        messages: ["User not found"],
+        data: []
+      });
+    }
+
+    const user = results[0];
+
+    // Check current password
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isMatch) {
+      return res.status(400).json({
+        status: false,
+        messages: ["Current password is incorrect"],
+        data: []
+      });
+    }
+
+    // Check new password match
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({
+        status: false,
+        messages: ["New password and confirm password do not match"],
+        data: []
+      });
+    }
+
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    // Update password in DB
+    await db.query("UPDATE users SET password = ? WHERE id = ?", [
+      hashedPassword,
+      userId
+    ]);
+
+    return res.json({
+      status: true,
+      messages: ["Password updated successfully"],
+      data: []
+    });
+
   } catch (err) {
     console.error(err);
     return res.status(500).json({

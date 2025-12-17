@@ -14,14 +14,14 @@ export const verifyToken = async (req, res, next) => {
       });
     }
 
-    // Fetch user info and role using token_id
+    // Fetch user info and role using token column
     const [rows] = await db.query(
       `SELECT u.id AS user_id, u.name, u.email, u.status, r.name AS role
        FROM user_details ud
        JOIN users u ON ud.user_id = u.id
        LEFT JOIN user_roles ur ON u.id = ur.user_id
        LEFT JOIN roles r ON ur.role_id = r.id
-       WHERE ud.token_id = ?`,
+       WHERE ud.token = ?`,
       [token]
     );
 
@@ -32,9 +32,9 @@ export const verifyToken = async (req, res, next) => {
       });
     }
 
-    // Optional: Update last login
+    // Update last login
     try {
-      await db.query("UPDATE user_details SET last_login = NOW() WHERE token_id = ?", [token]);
+      await db.query("UPDATE user_details SET last_login = NOW() WHERE token = ?", [token]);
     } catch (err) {
       console.error("Failed to update last_login:", err);
     }
@@ -47,7 +47,7 @@ export const verifyToken = async (req, res, next) => {
       email: rows[0].email,
       status: rows[0].status,
       role: rows[0].role || "user",
-      token_id: token,
+      token: token,          // store actual token
     };
 
     next();
@@ -59,7 +59,8 @@ export const verifyToken = async (req, res, next) => {
     });
   }
 };
- 
+
+// Logout route
 export const logout = async (req, res) => {
   try {
     const authHeader = req.headers["authorization"];
@@ -83,14 +84,14 @@ export const logout = async (req, res) => {
         SET token_id = NULL, token = NULL
         WHERE user_id = (
           SELECT user_id FROM (
-            SELECT user_id FROM user_details WHERE token_id = ?
+            SELECT user_id FROM user_details WHERE token = ?
           ) t
         )
       `;
       params = [token];
 
     } else if (mode === "selected") {
-      // ✅ Use user_details.id instead of token_id
+      // Logout from selected sessions by user_details.id
       if (!Array.isArray(session_ids) || session_ids.length === 0) {
         return res.status(400).json({
           status: false,
@@ -106,11 +107,11 @@ export const logout = async (req, res) => {
       params = session_ids;
 
     } else {
-      // Current device logout
+      // Logout current device
       query = `
         UPDATE user_details
         SET token_id = NULL, token = NULL
-        WHERE token_id = ?
+        WHERE token = ?
       `;
       params = [token];
     }

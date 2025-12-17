@@ -96,13 +96,13 @@ router.post("/register", async (req, res) => {
 
     return res.json({
       status: true,
-      messages: ["User registered successfully"],
-      token_id: token,
+      messages: ["User registered successfully"], 
       user: {
         id: userId,
         name,
         email,
         phone_number,
+        token,
         role_id: roleData.role_id,
         role: roleData.role_name,
         status: "active"
@@ -168,12 +168,12 @@ router.post("/login", async (req, res) => {
     return res.json({
       status: true,
       message: "Login successful",
-      token_id: token,
       data: {
         userId: user.id,
         name: user.name,
         email: user.email,
         phone_number: user.phone_number,
+        token,
         role_id,
         role,
         status: Number(user.status)
@@ -288,13 +288,13 @@ router.post("/otp", async (req, res) => {
 
     return res.json({
       status: true,
-      message: "Logged in successfully",
-      token_id: token,
+      message: "Logged in successfully", 
       data: {
         userId: user.id,
         name: user.name,
         email: user.email,
         phone_number: user.phone_number,
+        token,
         role_id,
         role,
         status: Number(user.status)
