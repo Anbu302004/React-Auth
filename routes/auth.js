@@ -354,8 +354,7 @@ router.post("/forgot-password", async (req, res) => {
       otp,
       expiresAt: Date.now() + 5 * 60 * 1000
     };
-
-    // 👉 sendEmail(email, otp)
+ 
 
     console.log("OTP STORE:", resetPasswordStore[email]);
 
