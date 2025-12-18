@@ -10,6 +10,7 @@ const otpStore = {};
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const phoneRegex = /^[0-9]{10}$/;
 const nameRegex = /^[A-Za-z\s]+$/;
+const resetPasswordStore = {};
 
 // ========================= SESSION CREATION =========================
 export async function createSession(userId, req) { 
@@ -305,6 +306,142 @@ router.post("/otp", async (req, res) => {
     return res.status(500).json({ status: false, message: "Server error" });
   }
 });
+
+router.post("/forgot-password", async (req, res) => {
+  try {
+    let { email, phone_number } = req.body || {};
+
+    email = email?.trim().toLowerCase();
+    phone_number = phone_number?.replace(/\D/g, "");
+
+    if (!email || !phone_number) {
+      return res.status(400).json({
+        status: false,
+        message: "Email and phone number are required"
+      });
+    }
+
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({
+        status: false,
+        message: "Invalid email format"
+      });
+    }
+
+    if (!phoneRegex.test(phone_number)) {
+      return res.status(400).json({
+        status: false,
+        message: "Invalid phone number"
+      });
+    }
+
+    const [users] = await db.query(
+      "SELECT id FROM users WHERE LOWER(email)=? AND phone_number=? LIMIT 1",
+      [email, phone_number]
+    );
+
+    // Security-safe response
+    if (!users.length) {
+      return res.json({
+        status: true,
+        message: "If the account exists, OTP will be sent to email"
+      });
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+    resetPasswordStore[email] = {
+      otp,
+      expiresAt: Date.now() + 5 * 60 * 1000
+    };
+
+    // 👉 sendEmail(email, otp)
+
+    console.log("OTP STORE:", resetPasswordStore[email]);
+
+    return res.json({
+      status: true,
+      message: "OTP sent to registered email" ,
+      otp: otp
+    });
+
+  } catch (err) {
+    console.error("FORGOT PASSWORD ERROR 👉", err);
+    return res.status(500).json({
+      status: false,
+      message: "Server error"
+    });
+  }
+});
+
+
+router.post("/reset-password", async (req, res) => {
+  try {
+    let { email, otp, new_password, confirm_password } = req.body || {};
+
+    email = email?.trim().toLowerCase();
+
+    if (!email || !otp || !new_password || !confirm_password) {
+      return res.status(400).json({
+        status: false,
+        message: "All fields are required"
+      });
+    }
+
+    if (new_password !== confirm_password) {
+      return res.status(400).json({
+        status: false,
+        message: "Passwords do not match"
+      });
+    }
+
+    const data = resetPasswordStore[email];
+
+    if (!data) {
+      return res.status(400).json({
+        status: false,
+        message: "OTP expired or invalid"
+      });
+    }
+
+    if (Date.now() > data.expiresAt) {
+      delete resetPasswordStore[email];
+      return res.status(400).json({
+        status: false,
+        message: "OTP expired"
+      });
+    }
+
+    if (data.otp !== otp) {
+      return res.status(400).json({
+        status: false,
+        message: "Invalid OTP"
+      });
+    }
+
+    const hashedPassword = await bcrypt.hash(new_password, 10);
+
+    await db.query(
+      "UPDATE users SET password=? WHERE LOWER(email)=?",
+      [hashedPassword, email]
+    );
+
+    delete resetPasswordStore[email];
+
+    return res.json({
+      status: true,
+      message: "Password reset successful"
+    });
+
+  } catch (err) {
+    console.error("RESET PASSWORD ERROR 👉", err);
+    return res.status(500).json({
+      status: false,
+      message: "Server error"
+    });
+  }
+});
+
 
 // ========================= UPDATE PROFILE =========================
 router.put("/update", verifyToken, async (req, res) => {
