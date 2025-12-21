@@ -254,12 +254,10 @@ router.post("/otp", async (req, res) => {
       return res.status(404).json({ status: false, message: "Account not found, please register first" });
 
     const user = results[0];
-
-    // 🚫 Blocked
+ 
     if (Number(user.status) === 0)
       return res.status(403).json({ status: false, message: "Your account has been blocked. Contact admin." });
-
-    // ✅ Auto-activate if deactivated
+ 
     if (Number(user.status) === 2) {
       await db.query("UPDATE users SET status = 1 WHERE id = ?", [user.id]);
       user.status = 1;
@@ -339,8 +337,7 @@ router.post("/forgot-password", async (req, res) => {
       "SELECT id FROM users WHERE LOWER(email)=? AND phone_number=? LIMIT 1",
       [email, phone_number]
     );
-
-    // Security-safe response
+ 
     if (!users.length) {
       return res.json({
         status: true,
