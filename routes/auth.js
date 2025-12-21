@@ -443,39 +443,67 @@ router.post("/reset-password", async (req, res) => {
 router.put("/update", verifyToken, async (req, res) => {
   try {
     const userId = req.user.id;
-    let { name, phone_number, email, password } = req.body || {};
+    let { name, phone_number, email } = req.body || {};
+
     name = name?.trim();
     phone_number = phone_number?.trim();
     email = email?.trim();
-    password = password?.trim();
 
-    const [userResult] = await db.query("SELECT status, email, phone_number FROM users WHERE id = ?", [userId]);
-    if (!userResult.length) return res.status(404).json({ status: false, message: "User not found" });
+    const [userResult] = await db.query(
+      "SELECT status, email, phone_number FROM users WHERE id = ?",
+      [userId]
+    );
+
+    if (!userResult.length)
+      return res.status(404).json({ status: false, message: "User not found" });
 
     const user = userResult[0];
-    if (["inactive","deactive"].includes(user.status)) return res.status(403).json({ status: false, message: "Your account is deactivated. Please activate to update your profile." });
-    if (user.status === "blocked") return res.status(403).json({ status: false, message: "Your account is blocked. Contact admin." });
+
+    if (["inactive", "deactive"].includes(user.status))
+      return res.status(403).json({
+        status: false,
+        message: "Your account is deactivated. Please activate to update your profile.",
+      });
+
+    if (user.status === "blocked")
+      return res.status(403).json({
+        status: false,
+        message: "Your account is blocked. Contact admin.",
+      });
+    if ("password" in req.body) {
+  return res.status(400).json({
+    status: false,
+    message: "Password is not allowed in profile update. Use reset password."
+  });
+}
 
     const errors = [];
     if (!name) errors.push("Name is required");
-    if (name && (name.length < 3 || name.length > 50)) errors.push("Name must be between 3 and 50 characters");
-    if (name && !nameRegex.test(name)) errors.push("Name can only contain letters and spaces");
-    if (!phone_number) errors.push("Phone number is required");
-    if (phone_number && !phoneRegex.test(phone_number)) errors.push("Phone number must be 10 digits");
-    if (!email) errors.push("Email is required");
-    if (email && !emailRegex.test(email)) errors.push("Invalid email format");
-    if (!password) errors.push("Password is required");
-    if (password && password.length < 6) errors.push("Password must be at least 6 characters long");
-    if (errors.length) return res.status(400).json({ status: false, messages: errors });
+    if (name && (name.length < 3 || name.length > 50))
+      errors.push("Name must be between 3 and 50 characters");
+    if (name && !nameRegex.test(name))
+      errors.push("Name can only contain letters and spaces");
 
-    const hashed = bcrypt.hashSync(password, 10);
+    if (!phone_number) errors.push("Phone number is required");
+    if (phone_number && !phoneRegex.test(phone_number))
+      errors.push("Phone number must be 10 digits");
+
+    if (!email) errors.push("Email is required");
+    if (email && !emailRegex.test(email))
+      errors.push("Invalid email format");
+
+    if (errors.length)
+      return res.status(400).json({ status: false, messages: errors });
+
     const emailChanged = email !== user.email;
     const phoneChanged = phone_number !== user.phone_number;
 
-    let sql = "UPDATE users SET name = ?, phone_number = ?, email = ?, password = ?";
-    const params = [name, phone_number, email, hashed];
+    let sql = "UPDATE users SET name = ?, phone_number = ?, email = ?";
+    const params = [name, phone_number, email];
+
     if (emailChanged) sql += ", email_verify = 0";
     if (phoneChanged) sql += ", phone_verify = 0";
+
     sql += " WHERE id = ?";
     params.push(userId);
 
@@ -490,10 +518,19 @@ router.put("/update", verifyToken, async (req, res) => {
        WHERE u.id = ?`,
       [userId]
     );
-    return res.json({ status: true, message: "Profile updated successfully", data: updatedResults[0] });
+
+    return res.json({
+      status: true,
+      message: "Profile updated successfully",
+      data: updatedResults[0],
+    });
   } catch (err) {
     console.error(err);
-    if (err.code === "ER_DUP_ENTRY") return res.status(409).json({ status: false, message: "Email already exists" });
+    if (err.code === "ER_DUP_ENTRY")
+      return res
+        .status(409)
+        .json({ status: false, message: "Email already exists" });
+
     return res.status(500).json({ status: false, message: "Server error" });
   }
 });
