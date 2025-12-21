@@ -464,19 +464,18 @@ router.put("/update", verifyToken, async (req, res) => {
         status: false,
         message: "Your account is deactivated. Please activate to update your profile.",
       });
-
+    if ("password" in req.body) {
+     return res.status(400).json({
+        status: false,
+        message: "Password is not allowed in profile update. Use reset password."
+      });
+    }
     if (user.status === "blocked")
       return res.status(403).json({
         status: false,
         message: "Your account is blocked. Contact admin.",
       });
-    if ("password" in req.body) {
-  return res.status(400).json({
-    status: false,
-    message: "Password is not allowed in profile update. Use reset password."
-  });
-}
-
+    
     const errors = [];
     if (!name) errors.push("Name is required");
     if (name && (name.length < 3 || name.length > 50))
