@@ -3,7 +3,9 @@ import express from "express";
 import bcrypt from "bcryptjs"; 
 import db from "../config/db.js";
 import { v4 as uuidv4 } from "uuid";
-import { verifyToken, logout } from "../middleware/auth.js";  
+import { verifyToken, logout } from "../middleware/auth.js"; 
+import crypto from "crypto";
+
 
 const router = express.Router();
 const otpStore = {};  
@@ -305,6 +307,7 @@ router.post("/otp", async (req, res) => {
   }
 });
 
+// ========================= FORGET PASSWROD =========================
 router.post("/forgot-password", async (req, res) => {
   try {
     let { email, phone_number } = req.body || {};
@@ -319,17 +322,10 @@ router.post("/forgot-password", async (req, res) => {
       });
     }
 
-    if (!emailRegex.test(email)) {
+    if (!emailRegex.test(email) || !phoneRegex.test(phone_number)) {
       return res.status(400).json({
         status: false,
-        message: "Invalid email format"
-      });
-    }
-
-    if (!phoneRegex.test(phone_number)) {
-      return res.status(400).json({
-        status: false,
-        message: "Invalid phone number"
+        message: "Invalid email or phone number"
       });
     }
 
@@ -337,28 +333,28 @@ router.post("/forgot-password", async (req, res) => {
       "SELECT id FROM users WHERE LOWER(email)=? AND phone_number=? LIMIT 1",
       [email, phone_number]
     );
- 
+
+    // Always return same response (security)
     if (!users.length) {
       return res.json({
         status: true,
-        message: "If the account exists, OTP will be sent to email"
+        message: "If the account exists, token will be sent"
       });
     }
 
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const token = crypto.randomBytes(32).toString("hex");
 
     resetPasswordStore[email] = {
-      otp,
-      expiresAt: Date.now() + 5 * 60 * 1000
+      token,
+      expiresAt: Date.now() + 60 * 1000 // ⏰ 1 minute
     };
- 
 
-    console.log("OTP STORE:", resetPasswordStore[email]);
+    console.log("RESET TOKEN:", token);
 
     return res.json({
       status: true,
-      message: "OTP sent to registered email" ,
-      otp: otp
+      message: "Reset token generated",
+      token // remove in production
     });
 
   } catch (err) {
@@ -370,14 +366,14 @@ router.post("/forgot-password", async (req, res) => {
   }
 });
 
-
+// ========================= RESET PASSWORD =========================
 router.post("/reset-password", async (req, res) => {
   try {
-    let { email, otp, new_password, confirm_password } = req.body || {};
+    let { email, token, new_password, confirm_password } = req.body || {};
 
     email = email?.trim().toLowerCase();
 
-    if (!email || !otp || !new_password || !confirm_password) {
+    if (!email || !token || !new_password || !confirm_password) {
       return res.status(400).json({
         status: false,
         message: "All fields are required"
@@ -393,25 +389,20 @@ router.post("/reset-password", async (req, res) => {
 
     const data = resetPasswordStore[email];
 
-    if (!data) {
-      return res.status(400).json({
-        status: false,
-        message: "OTP expired or invalid"
-      });
-    }
-
-    if (Date.now() > data.expiresAt) {
+    // ❌ No token or expired → INVALID TOKEN
+    if (!data || Date.now() > data.expiresAt) {
       delete resetPasswordStore[email];
       return res.status(400).json({
         status: false,
-        message: "OTP expired"
+        message: "Invalid token"
       });
     }
 
-    if (data.otp !== otp) {
+    // ❌ Wrong token
+    if (data.token !== token) {
       return res.status(400).json({
         status: false,
-        message: "Invalid OTP"
+        message: "Invalid token"
       });
     }
 
