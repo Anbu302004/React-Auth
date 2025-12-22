@@ -333,8 +333,7 @@ router.post("/forgot-password", async (req, res) => {
       "SELECT id FROM users WHERE LOWER(email)=? AND phone_number=? LIMIT 1",
       [email, phone_number]
     );
-
-    // Always return same response (security)
+ 
     if (!users.length) {
       return res.json({
         status: true,
@@ -346,15 +345,14 @@ router.post("/forgot-password", async (req, res) => {
 
     resetPasswordStore[email] = {
       token,
-      expiresAt: Date.now() + 60 * 1000 // ⏰ 1 minute
+      expiresAt: Date.now() + 60 * 1000  
     };
-
-    console.log("RESET TOKEN:", token);
+ 
 
     return res.json({
       status: true,
       message: "Reset token generated",
-      token // remove in production
+      token  
     });
 
   } catch (err) {
@@ -388,8 +386,7 @@ router.post("/reset-password", async (req, res) => {
     }
 
     const data = resetPasswordStore[email];
-
-    // ❌ No token or expired → INVALID TOKEN
+ 
     if (!data || Date.now() > data.expiresAt) {
       delete resetPasswordStore[email];
       return res.status(400).json({
@@ -397,8 +394,7 @@ router.post("/reset-password", async (req, res) => {
         message: "Invalid token"
       });
     }
-
-    // ❌ Wrong token
+ 
     if (data.token !== token) {
       return res.status(400).json({
         status: false,
@@ -421,7 +417,7 @@ router.post("/reset-password", async (req, res) => {
     });
 
   } catch (err) {
-    console.error("RESET PASSWORD ERROR 👉", err);
+    console.error("RESET PASSWORD ERROR ", err);
     return res.status(500).json({
       status: false,
       message: "Server error"
