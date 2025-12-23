@@ -1,5 +1,5 @@
 import express from "express";
-import { verifyToken } from "../middleware/auth.js";
+import { verifyToken, logout } from "../middleware/auth.js";
 import bcrypt from "bcryptjs";
 import db from "../config/db.js";
 const router = express.Router();
@@ -291,4 +291,16 @@ router.delete("/delete", verifyToken, async (req, res) => {
     });
   }
 });
+// ========================= Logout ALL Sessions =========================
+router.post("/logout/all", verifyToken, (req, res, next) => {
+  req.body.mode = "all";
+  next();
+}, logout);
+
+// ========================= Logout Selected Sessions =========================
+router.post("/logout/selected", verifyToken, (req, res, next) => {
+  req.body.mode = "selected";
+  next();
+}, logout);
+
 export default router;

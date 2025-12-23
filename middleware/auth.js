@@ -59,7 +59,6 @@ export const verifyToken = async (req, res, next) => {
     });
   }
 };
-
 // Logout route
 export const logout = async (req, res) => {
   try {
@@ -73,25 +72,23 @@ export const logout = async (req, res) => {
       });
     }
 
+    const userId = req.user.id; // from verifyToken
     const { mode, session_ids } = req.body || {};
+
     let query = "";
     let params = [];
 
+    // ================= LOGOUT ALL DEVICES =================
     if (mode === "all") {
-      // Logout from all devices of this user
       query = `
         UPDATE user_details
         SET token_id = NULL, token = NULL
-        WHERE user_id = (
-          SELECT user_id FROM (
-            SELECT user_id FROM user_details WHERE token = ?
-          ) t
-        )
+        WHERE user_id = ?
       `;
-      params = [token];
+      params = [userId];
 
+    // ================= LOGOUT SELECTED SESSIONS =================
     } else if (mode === "selected") {
-      // Logout from selected sessions by user_details.id
       if (!Array.isArray(session_ids) || session_ids.length === 0) {
         return res.status(400).json({
           status: false,
@@ -103,17 +100,18 @@ export const logout = async (req, res) => {
         UPDATE user_details
         SET token_id = NULL, token = NULL
         WHERE id IN (${session_ids.map(() => "?").join(",")})
+          AND user_id = ?
       `;
-      params = session_ids;
+      params = [...session_ids, userId];
 
+    // ================= LOGOUT CURRENT SESSION =================
     } else {
-      // Logout current device
       query = `
         UPDATE user_details
         SET token_id = NULL, token = NULL
-        WHERE token = ?
+        WHERE token = ? AND user_id = ?
       `;
-      params = [token];
+      params = [token, userId];
     }
 
     const [result] = await db.query(query, params);
@@ -121,7 +119,7 @@ export const logout = async (req, res) => {
     if (result.affectedRows === 0) {
       return res.status(400).json({
         status: false,
-        message: "Session not found or already logged out",
+        message: "No matching sessions found for this user",
       });
     }
 
@@ -131,6 +129,7 @@ export const logout = async (req, res) => {
       mode: mode || "current",
       count: result.affectedRows,
     });
+
   } catch (err) {
     console.error("Logout error:", err);
     return res.status(500).json({
