@@ -9,7 +9,7 @@ router.get("/profile", verifyToken, async (req, res) => {
   try {
     const userId = req.user.id;
     const [results] = await db.query(
-      "SELECT id, name, email, phone_number, status, password FROM users WHERE id = ?",
+      "SELECT id, name, email, phone_number, status, password, email_verify, phone_verify FROM users WHERE id = ?",
       [userId]
     );
 
@@ -47,7 +47,9 @@ router.get("/profile", verifyToken, async (req, res) => {
           name: user.name,
           email: user.email,
           phone_number: user.phone_number,
-          status: user.status
+          status: user.status,
+          email_verify: user.email_verify,
+          phone_verify: user.phone_verify
         }
       ]
     });
@@ -70,8 +72,7 @@ router.put("/reset-password", verifyToken, async (req, res) => {
     if (!currentPassword || !newPassword || !confirmPassword) {
       return res.status(400).json({
         status: false,
-        messages: ["All fields are required"],
-        data: []
+        messages: ["All fields are required"], 
       });
     }
  
@@ -83,8 +84,7 @@ router.put("/reset-password", verifyToken, async (req, res) => {
     if (!results.length) {
       return res.status(404).json({
         status: false,
-        messages: ["User not found"],
-        data: []
+        messages: ["User not found"], 
       });
     }
 
@@ -95,8 +95,7 @@ router.put("/reset-password", verifyToken, async (req, res) => {
     if (!isMatch) {
       return res.status(400).json({
         status: false,
-        messages: ["Current password is incorrect"],
-        data: []
+        messages: ["Current password is incorrect"], 
       });
     }
 
@@ -104,8 +103,7 @@ router.put("/reset-password", verifyToken, async (req, res) => {
     if (newPassword !== confirmPassword) {
       return res.status(400).json({
         status: false,
-        messages: ["New password and confirm password do not match"],
-        data: []
+        messages: ["New password and confirm password do not match"], 
       });
     }
 
@@ -120,16 +118,14 @@ router.put("/reset-password", verifyToken, async (req, res) => {
 
     return res.json({
       status: true,
-      messages: ["Password updated successfully"],
-      data: []
+      messages: ["Password updated successfully"], 
     });
 
   } catch (err) {
     console.error(err);
     return res.status(500).json({
       status: false,
-      messages: ["Database error"],
-      data: []
+      messages: ["Database error"], 
     });
   }
 });

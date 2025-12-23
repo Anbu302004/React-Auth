@@ -371,10 +371,28 @@ router.post("/reset-password", async (req, res) => {
 
     email = email?.trim().toLowerCase();
 
-    if (!email || !token || !new_password || !confirm_password) {
+    if(!email){
       return res.status(400).json({
         status: false,
-        message: "All fields are required"
+        message: "Email is required"
+      });
+    }
+    if (!token) {
+      return res.status(400).json({
+        status: false, 
+        message: "Token is required"
+      });
+    }
+    if (!new_password || new_password.length < 6) {
+      return res.status(400).json({
+        status: false,
+        message: "New password must be at least 6 characters long"
+      });
+    }
+    if (!confirm_password) {
+      return res.status(400).json({
+        status: false,
+        message: "Confirm password is required"
       });
     }
 
@@ -391,7 +409,7 @@ router.post("/reset-password", async (req, res) => {
       delete resetPasswordStore[email];
       return res.status(400).json({
         status: false,
-        message: "Invalid token"
+        message: "Invalid token Or Email Id"
       });
     }
  
@@ -425,7 +443,6 @@ router.post("/reset-password", async (req, res) => {
   }
 });
 
-
 // ========================= UPDATE PROFILE =========================
 router.put("/update", verifyToken, async (req, res) => {
   try {
@@ -434,7 +451,7 @@ router.put("/update", verifyToken, async (req, res) => {
 
     name = name?.trim();
     phone_number = phone_number?.trim();
-    email = email?.trim();
+    email = email?.trim().toLowerCase();
 
     const [userResult] = await db.query(
       "SELECT status, email, phone_number FROM users WHERE id = ?",
@@ -442,28 +459,34 @@ router.put("/update", verifyToken, async (req, res) => {
     );
 
     if (!userResult.length)
-      return res.status(404).json({ status: false, message: "User not found" });
+      return res.status(404).json({
+        status: false,
+        messages: ["User not found"]
+      });
 
     const user = userResult[0];
 
     if (["inactive", "deactive"].includes(user.status))
       return res.status(403).json({
         status: false,
-        message: "Your account is deactivated. Please activate to update your profile.",
+        messages: ["Your account is deactivated. Please activate to update your profile."]
       });
-    if ("password" in req.body) {
-     return res.status(400).json({
+
+    if ("password" in req.body)
+      return res.status(400).json({
         status: false,
-        message: "Password is not allowed in profile update. Use reset password."
+        messages: ["Password is not allowed in profile update. Use reset password."]
       });
-    }
+
     if (user.status === "blocked")
       return res.status(403).json({
         status: false,
-        message: "Your account is blocked. Contact admin.",
+        messages: ["Your account is blocked. Contact admin."]
       });
-    
+
+    /* ================= Validations ================= */
     const errors = [];
+
     if (!name) errors.push("Name is required");
     if (name && (name.length < 3 || name.length > 50))
       errors.push("Name must be between 3 and 50 characters");
@@ -479,8 +502,39 @@ router.put("/update", verifyToken, async (req, res) => {
       errors.push("Invalid email format");
 
     if (errors.length)
-      return res.status(400).json({ status: false, messages: errors });
+      return res.status(400).json({
+        status: false,
+        messages: errors
+      });
 
+    /* ================= Uniqueness Checks ================= */
+    if (email !== user.email) {
+      const [emailExists] = await db.query(
+        "SELECT id FROM users WHERE email = ? AND id != ? LIMIT 1",
+        [email, userId]
+      );
+
+      if (emailExists.length)
+        return res.status(409).json({
+          status: false,
+          messages: ["Email already exists"]
+        });
+    }
+
+    if (phone_number !== user.phone_number) {
+      const [phoneExists] = await db.query(
+        "SELECT id FROM users WHERE phone_number = ? AND id != ? LIMIT 1",
+        [phone_number, userId]
+      );
+
+      if (phoneExists.length)
+        return res.status(409).json({
+          status: false,
+          messages: ["Phone number already exists"]
+        });
+    }
+
+    /* ================= Update ================= */
     const emailChanged = email !== user.email;
     const phoneChanged = phone_number !== user.phone_number;
 
@@ -508,16 +562,16 @@ router.put("/update", verifyToken, async (req, res) => {
     return res.json({
       status: true,
       message: "Profile updated successfully",
-      data: updatedResults[0],
+      data: updatedResults[0]
     });
+
   } catch (err) {
     console.error(err);
-    if (err.code === "ER_DUP_ENTRY")
-      return res
-        .status(409)
-        .json({ status: false, message: "Email already exists" });
 
-    return res.status(500).json({ status: false, message: "Server error" });
+    return res.status(500).json({
+      status: false,
+      messages: ["Server error"]
+    });
   }
 });
 
