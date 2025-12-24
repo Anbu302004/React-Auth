@@ -195,7 +195,7 @@ router.get("/tokens", verifyToken, async (req, res) => {
          device,
          created_at
        FROM user_details
-       WHERE user_id = ?
+       WHERE user_id = ? AND token IS NOT NULL
        ORDER BY created_at DESC`,
       [userId]
     );
@@ -220,7 +220,7 @@ router.get("/tokens", verifyToken, async (req, res) => {
     });
   }
 });
- 
+
 
 // ========================= Delete Profile =========================
 router.delete("/delete", verifyToken, async (req, res) => {

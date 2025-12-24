@@ -3,7 +3,6 @@ import db from "../config/db.js";
 // Middleware to verify UUID token and attach user info
 export const verifyToken = async (req, res, next) => {
   try {
-    // Get token from Authorization header
     const authHeader = req.headers["authorization"];
     const token = authHeader?.split(" ")[1];
 
@@ -14,7 +13,6 @@ export const verifyToken = async (req, res, next) => {
       });
     }
 
-    // Fetch user info and role using token column
     const [rows] = await db.query(
       `SELECT u.id AS user_id, u.name, u.email, u.status, r.name AS role
        FROM user_details ud
@@ -32,22 +30,20 @@ export const verifyToken = async (req, res, next) => {
       });
     }
 
-    // Update last login
     try {
       await db.query("UPDATE user_details SET last_login = NOW() WHERE token = ?", [token]);
     } catch (err) {
       console.error("Failed to update last_login:", err);
     }
 
-    // Attach user info to req.user
     req.user = {
       user_id: rows[0].user_id,
-      id: rows[0].user_id,   // can use either id or user_id in routes
+      id: rows[0].user_id,
       name: rows[0].name,
       email: rows[0].email,
       status: rows[0].status,
       role: rows[0].role || "user",
-      token: token,          // store actual token
+      token: token,
     };
 
     next();
@@ -59,7 +55,8 @@ export const verifyToken = async (req, res, next) => {
     });
   }
 };
-// Logout route
+
+// Logout route with all modes
 export const logout = async (req, res) => {
   try {
     const authHeader = req.headers["authorization"];
@@ -72,7 +69,7 @@ export const logout = async (req, res) => {
       });
     }
 
-    const userId = req.user.id; // from verifyToken
+    const userId = req.user.id;
     const { mode, session_ids } = req.body || {};
 
     let query = "";
@@ -125,7 +122,12 @@ export const logout = async (req, res) => {
 
     return res.json({
       status: true,
-      message: "Logout successful",
+      message:
+        mode === "all"
+          ? "Logged out from all devices successfully"
+          : mode === "selected"
+          ? "Logged out from selected sessions successfully"
+          : "Logged out from current device successfully",
       mode: mode || "current",
       count: result.affectedRows,
     });
