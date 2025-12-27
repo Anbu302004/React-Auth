@@ -120,35 +120,30 @@ router.post("/register", async (req, res) => {
 // ========================= LOGIN =========================
 router.post("/login", async (req, res) => {
   try {
-    let { email, password } = req.body || {};
-    email = email?.trim() || "";
+    let { email, phone_number, password } = req.body || {};
+    const identifier = (email || phone_number || "").trim();
     password = password?.trim() || "";
 
-    if (!email || !password)
-      return res.status(400).json({ status: false, message: "Email and password are required" });
+    if (!identifier || !password)
+      return res.status(400).json({ status: false, message: "Email/Phone and password are required" });
 
     const [results] = await db.query(
-      "SELECT * FROM users WHERE email = ?",
-      [email]
+      "SELECT * FROM users WHERE email = ? OR phone_number = ?",
+      [identifier, identifier]
     );
 
     if (!results.length)
-      return res.status(401).json({ status: false, message: "Incorrect email or password" });
+      return res.status(401).json({ status: false, message: "Incorrect email/phone or password" });
 
     const user = results[0];
     const validPassword = await bcrypt.compare(password, user.password);
 
     if (!validPassword)
-      return res.status(401).json({ status: false, message: "Incorrect email or password" });
+      return res.status(401).json({ status: false, message: "Incorrect email/phone or password" });
 
-    // 🚫 Blocked
     if (Number(user.status) === 0)
-      return res.status(403).json({
-        status: false,
-        message: "Your account has been blocked. Contact admin."
-      });
+      return res.status(403).json({ status: false, message: "Your account has been blocked. Contact admin." });
 
-    // ✅ Auto-activate if deactivated
     if (Number(user.status) === 2) {
       await db.query("UPDATE users SET status = 1 WHERE id = ?", [user.id]);
       user.status = 1;
@@ -187,7 +182,6 @@ router.post("/login", async (req, res) => {
     return res.status(500).json({ status: false, message: "Server error" });
   }
 });
-
 
 // ========================= GENERATE OTP =========================
 router.post("/otp", async (req, res) => {
