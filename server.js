@@ -3,24 +3,21 @@ import cors from "cors";
 import dotenv from "dotenv";
 
 import authRoutes from "./routes/auth.js";
-import adminRoutes from "./routes/admin.js";
-import usersRoutes from "./routes/users.js";
-import categoriesRoutes from "./routes/categories.js";
-import exploreRoutes from "./routes/explore.js";
-import galleryRoutes from "./routes/gallery.js";
-import pagesRoutes from "./routes/pages.js";
 
 dotenv.config();
 
 const app = express();
 
 /* ================= Middleware ================= */
-app.use(cors());
+app.use(cors({
+  origin: 'http://localhost:5173',
+  credentials: true,
+  methods: ['GET','POST','PUT','DELETE','PATCH'],
+  allowedHeaders: ['Content-Type','Authorization']
+}));
 
-/* 1️⃣ JSON parser */
 app.use(express.json());
 
-/* 2️⃣ JSON syntax error handler */
 app.use((err, req, res, next) => {
   if (err instanceof SyntaxError && err.status === 400 && "body" in err) {
     return res.status(400).json({
@@ -33,12 +30,6 @@ app.use((err, req, res, next) => {
 
 /* ================= Routes ================= */
 app.use("/auth", authRoutes);
-app.use("/api", categoriesRoutes);
-app.use("/api", exploreRoutes);
-app.use("/api", galleryRoutes);
-app.use("/api", pagesRoutes);
-app.use("/admin", adminRoutes);
-app.use("/users", usersRoutes);
 
 /* ================= Health Check ================= */
 app.get("/", (req, res) => {
@@ -47,14 +38,4 @@ app.get("/", (req, res) => {
 
 /* ================= Server ================= */
 const PORT = Number(process.env.PORT) || 5000;
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-});
-
-/* ================= Middleware ================= */
-app.use(cors({
-  origin: 'http://localhost:5173', // Your React app URL
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
