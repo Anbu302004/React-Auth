@@ -302,51 +302,61 @@ router.post("/otp", async (req, res) => {
 });
 
 // ========================= FORGET PASSWROD =========================
-router.post("/forgot-password", async (req, res) => {
+ router.post("/forgot-password", async (req, res) => {
   try {
-    let { email, phone_number } = req.body || {};
+    let { email } = req.body || {};
 
     email = email?.trim().toLowerCase();
-    phone_number = phone_number?.replace(/\D/g, "");
 
-    if (!email || !phone_number) {
+    if (!email) {
       return res.status(400).json({
         status: false,
-        message: "Email and phone number are required"
+        message: "Email is required"
       });
     }
 
-    if (!emailRegex.test(email) || !phoneRegex.test(phone_number)) {
+    if (!emailRegex.test(email)) {
       return res.status(400).json({
         status: false,
-        message: "Invalid email or phone number"
+        message: "Invalid email"
       });
     }
 
     const [users] = await db.query(
-      "SELECT id FROM users WHERE LOWER(email)=? AND phone_number=? LIMIT 1",
-      [email, phone_number]
+      "SELECT id FROM users WHERE LOWER(email)=? LIMIT 1",
+      [email]
     );
- 
+
+    // Always respond with success to avoid revealing email existence
     if (!users.length) {
       return res.json({
         status: true,
-        message: "If the account exists, token will be sent"
+        message: "If the account exists, a reset token will be sent"
       });
     }
 
-    const token = crypto.randomBytes(32).toString("hex");
+    const now = Date.now();
 
+    // Reuse token if still valid (within 30 seconds)
+    if (resetPasswordStore[email] && resetPasswordStore[email].expiresAt > now) {
+      return res.json({
+        status: true,
+        message: "Reset token generated",
+        token: resetPasswordStore[email].token
+      });
+    }
+
+    // Generate a new token
+    const token = crypto.randomBytes(32).toString("hex");
     resetPasswordStore[email] = {
       token,
-      expiresAt: Date.now() + 60 * 1000  
+      expiresAt: now + 30 * 1000 // 30 seconds expiry
     };
- 
 
     return res.json({
       status: true,
       message: "Reset token generated",
-      token  
+      token
     });
 
   } catch (err) {
@@ -359,30 +369,25 @@ router.post("/forgot-password", async (req, res) => {
 });
 
 // ========================= RESET PASSWORD =========================
+// ========================= RESET PASSWORD WITHOUT EMAIL =========================
 router.post("/reset-password", async (req, res) => {
   try {
-    let { email, token, new_password, confirm_password } = req.body || {};
+    let { token, new_password, confirm_password } = req.body || {};
 
-    email = email?.trim().toLowerCase();
-
-    if(!email){
-      return res.status(400).json({
-        status: false,
-        message: "Email is required"
-      });
-    }
     if (!token) {
       return res.status(400).json({
         status: false, 
         message: "Token is required"
       });
     }
+
     if (!new_password || new_password.length < 6) {
       return res.status(400).json({
         status: false,
         message: "New password must be at least 6 characters long"
       });
     }
+
     if (!confirm_password) {
       return res.status(400).json({
         status: false,
@@ -397,23 +402,20 @@ router.post("/reset-password", async (req, res) => {
       });
     }
 
-    const data = resetPasswordStore[email];
- 
-    if (!data || Date.now() > data.expiresAt) {
+    // Find the email corresponding to the token
+    const email = Object.keys(resetPasswordStore).find(
+      (key) => resetPasswordStore[key].token === token
+    );
+
+    if (!email || Date.now() > resetPasswordStore[email].expiresAt) {
       delete resetPasswordStore[email];
       return res.status(400).json({
         status: false,
-        message: "Invalid token Or Email Id"
-      });
-    }
- 
-    if (data.token !== token) {
-      return res.status(400).json({
-        status: false,
-        message: "Invalid token"
+        message: "Invalid or expired token"
       });
     }
 
+    // Token is valid, update password
     const hashedPassword = await bcrypt.hash(new_password, 10);
 
     await db.query(
@@ -421,6 +423,7 @@ router.post("/reset-password", async (req, res) => {
       [hashedPassword, email]
     );
 
+    // Remove token after successful reset
     delete resetPasswordStore[email];
 
     return res.json({
@@ -429,7 +432,7 @@ router.post("/reset-password", async (req, res) => {
     });
 
   } catch (err) {
-    console.error("RESET PASSWORD ERROR ", err);
+    console.error("RESET PASSWORD ERROR", err);
     return res.status(500).json({
       status: false,
       message: "Server error"
