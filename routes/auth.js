@@ -366,9 +366,7 @@ router.post("/otp", async (req, res) => {
       message: "Server error"
     });
   }
-});
-
-// ========================= RESET PASSWORD =========================
+}); 
 // ========================= RESET PASSWORD WITHOUT EMAIL =========================
 router.post("/reset-password", async (req, res) => {
   try {
@@ -439,16 +437,15 @@ router.post("/reset-password", async (req, res) => {
     });
   }
 });
-
-// ========================= UPDATE PROFILE =========================
 router.put("/update", verifyToken, async (req, res) => {
   try {
     const userId = req.user.id;
-    let { name, phone_number, email } = req.body || {};
+    let { name, phone_number, email, profile_image } = req.body || {};
 
     name = name?.trim();
     phone_number = phone_number?.trim();
     email = email?.trim().toLowerCase();
+    profile_image = profile_image?.trim() || null;
 
     const [userResult] = await db.query(
       "SELECT status, email, phone_number FROM users WHERE id = ?",
@@ -535,8 +532,9 @@ router.put("/update", verifyToken, async (req, res) => {
     const emailChanged = email !== user.email;
     const phoneChanged = phone_number !== user.phone_number;
 
-    let sql = "UPDATE users SET name = ?, phone_number = ?, email = ?";
-    const params = [name, phone_number, email];
+    let sql =
+      "UPDATE users SET name = ?, phone_number = ?, email = ?, profile_image = ?";
+    const params = [name, phone_number, email, profile_image];
 
     if (emailChanged) sql += ", email_verify = 0";
     if (phoneChanged) sql += ", phone_verify = 0";
@@ -547,7 +545,9 @@ router.put("/update", verifyToken, async (req, res) => {
     await db.query(sql, params);
 
     const [updatedResults] = await db.query(
-      `SELECT u.id, u.name, u.email, u.phone_number, u.email_verify, u.phone_verify,
+      `SELECT u.id, u.name, u.email, u.phone_number,
+              u.profile_image,
+              u.email_verify, u.phone_verify,
               r.id AS role_id, r.name AS role
        FROM users u
        LEFT JOIN user_roles ur ON ur.user_id = u.id
@@ -571,6 +571,7 @@ router.put("/update", verifyToken, async (req, res) => {
     });
   }
 });
+
 
 // ========================= LOGOUT =========================
 router.post("/logout", verifyToken, logout);

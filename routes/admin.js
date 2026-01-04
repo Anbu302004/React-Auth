@@ -230,6 +230,61 @@ router.put("/update/:id", verifyToken, async (req, res) => {
     return res.status(500).json({ status: false, messages: ["Database error"], error: err.message });
   }
 });
+/* ========================================================
+   USER OVERVIEW (VIEW DETAILS)
+======================================================== */
+router.get("/overview/:id", verifyToken, async (req, res) => {
+  try {
+    if (req.user.role !== "admin") {
+      return res.status(403).json({
+        status: false,
+        message: "Access denied Authorization Required"
+      });
+    }
+
+    const userId = req.params.id;
+
+    const sql = `
+      SELECT 
+        u.id,
+        u.name,
+        u.email,
+        u.phone_number,
+        u.status,
+        u.email_verify,
+        u.phone_verify,
+        u.created_at,
+        r.id AS role_id,
+        r.name AS role
+      FROM users u
+      LEFT JOIN user_roles ur ON ur.user_id = u.id
+      LEFT JOIN roles r ON r.id = ur.role_id
+      WHERE u.id = ?
+    `;
+
+    const [rows] = await db.query(sql, [userId]);
+
+    if (rows.length === 0) {
+      return res.status(404).json({
+        status: false,
+        message: "User not found"
+      });
+    }
+
+    return res.json({
+      status: true,
+      message: "User overview fetched successfully",
+      data: rows[0]
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({
+      status: false,
+      message: "Database error",
+      error: err.message
+    });
+  }
+});
 
 /* ========================================================
    DELETE USER
