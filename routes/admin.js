@@ -143,7 +143,7 @@ router.post("/create", verifyToken, async (req, res) => {
 });
 
 /* ========================================================
-   UPDATE USER
+   UPDATE USER (with password update capability)
 ======================================================== */
 router.put("/update/:id", verifyToken, async (req, res) => {
   try {
@@ -212,7 +212,7 @@ router.put("/update/:id", verifyToken, async (req, res) => {
 
     return res.json({
       status: true,
-      message: "User updated successfully",
+      message: password ? "User updated successfully (password changed)" : "User updated successfully",
       data: {
         id: userId,
         name: userRes[0].name,
@@ -222,7 +222,8 @@ router.put("/update/:id", verifyToken, async (req, res) => {
         role: roleName,
         status: userRes[0].status,
         email_verify: userRes[0].email_verify,
-        phone_verify: userRes[0].phone_verify
+        phone_verify: userRes[0].phone_verify,
+        password_updated: !!password
       }
     });
   } catch (err) {
@@ -230,6 +231,70 @@ router.put("/update/:id", verifyToken, async (req, res) => {
     return res.status(500).json({ status: false, messages: ["Database error"], error: err.message });
   }
 });
+
+/* ========================================================
+   RESET USER PASSWORD 
+======================================================== */
+router.put("/reset-password/:id", verifyToken, async (req, res) => {
+  try {
+    if (req.user.role !== "admin") {
+      return res.status(403).json({ 
+        status: false, 
+        messages: ["Access denied Authorization Required"] 
+      });
+    }
+
+    const userId = req.params.id;
+    const { newPassword } = req.body;
+
+    if (!newPassword) {
+      return res.status(400).json({
+        status: false,
+        messages: ["New password is required"]
+      });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        status: false,
+        messages: ["Password must be at least 6 characters long"]
+      });
+    }
+
+    // Check if user exists
+    const [userCheck] = await db.query("SELECT id, name, email FROM users WHERE id = ?", [userId]);
+    
+    if (userCheck.length === 0) {
+      return res.status(404).json({
+        status: false,
+        messages: ["User not found"]
+      });
+    }
+
+    // Hash and update password
+    const hashedPassword = bcrypt.hashSync(newPassword, 10);
+    await db.query("UPDATE users SET password = ? WHERE id = ?", [hashedPassword, userId]);
+
+    return res.json({
+      status: true,
+      messages: ["Password reset successfully for user"],
+      data: {
+        user_id: userId,
+        name: userCheck[0].name,
+        email: userCheck[0].email
+      }
+    });
+
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({
+      status: false,
+      messages: ["Database error"],
+      error: err.message
+    });
+  }
+});
+
 /* ========================================================
    USER OVERVIEW (VIEW DETAILS)
 ======================================================== */
@@ -281,6 +346,196 @@ router.get("/overview/:id", verifyToken, async (req, res) => {
     return res.status(500).json({
       status: false,
       message: "Database error",
+      error: err.message
+    });
+  }
+});
+
+/* ========================================================
+   VIEW USER'S ACTIVE TOKENS (Admin only)
+======================================================== */
+router.get("/tokens/:id", verifyToken, async (req, res) => {
+  try {
+    if (req.user.role !== "admin") {
+      return res.status(403).json({
+        status: false,
+        messages: ["Access denied Authorization Required"],
+        data: []
+      });
+    }
+
+    const userId = Number(req.params.id);
+
+    if (!userId || isNaN(userId)) {
+      return res.status(400).json({
+        status: false,
+        messages: ["Invalid user ID"],
+        data: []
+      });
+    }
+
+    // Check if user exists
+    const [userCheck] = await db.query(
+      "SELECT id, name, email FROM users WHERE id = ?",
+      [userId]
+    );
+
+    if (userCheck.length === 0) {
+      return res.status(404).json({
+        status: false,
+        messages: ["User not found"],
+        data: []
+      });
+    }
+
+    // Fetch all active tokens for this user
+    const [tokens] = await db.query(
+      `SELECT 
+         id,
+         user_id,
+         token AS token_id,
+         ip_address AS ip,
+         device,
+         created_at
+       FROM user_details
+       WHERE user_id = ? AND token IS NOT NULL
+       ORDER BY created_at DESC`,
+      [userId]
+    );
+
+    return res.json({
+      status: true,
+      user: {
+        id: userCheck[0].id,
+        name: userCheck[0].name,
+        email: userCheck[0].email
+      },
+      count: tokens.length,
+      message: tokens.length === 0
+        ? "No active sessions found for this user"
+        : "Active sessions retrieved successfully",
+      data: tokens
+    });
+
+  } catch (err) {
+    console.error("Get user tokens error:", err);
+    return res.status(500).json({
+      status: false,
+      messages: ["Database error"],
+      data: [],
+      error: err.message
+    });
+  }
+});
+
+/* ========================================================
+   LOGOUT USER'S SPECIFIC SESSION (Admin only)
+======================================================== */
+router.delete("/tokens/:userId/:tokenId", verifyToken, async (req, res) => {
+  try {
+    if (req.user.role !== "admin") {
+      return res.status(403).json({
+        status: false,
+        messages: ["Access denied Authorization Required"]
+      });
+    }
+
+    const userId = Number(req.params.userId);
+    const tokenId = Number(req.params.tokenId);
+
+    if (!userId || !tokenId) {
+      return res.status(400).json({
+        status: false,
+        messages: ["Invalid user ID or token ID"]
+      });
+    }
+
+    // Delete the specific token
+    const [result] = await db.query(
+      "DELETE FROM user_details WHERE id = ? AND user_id = ?",
+      [tokenId, userId]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
+        status: false,
+        messages: ["Token not found or already logged out"]
+      });
+    }
+
+    return res.json({
+      status: true,
+      messages: ["Session terminated successfully"],
+      data: {
+        user_id: userId,
+        token_id: tokenId
+      }
+    });
+
+  } catch (err) {
+    console.error("Delete token error:", err);
+    return res.status(500).json({
+      status: false,
+      messages: ["Database error"],
+      error: err.message
+    });
+  }
+});
+
+/* ========================================================
+   LOGOUT ALL USER'S SESSIONS (Admin only)
+======================================================== */
+router.delete("/tokens/:userId/all", verifyToken, async (req, res) => {
+  try {
+    if (req.user.role !== "admin") {
+      return res.status(403).json({
+        status: false,
+        messages: ["Access denied Authorization Required"]
+      });
+    }
+
+    const userId = Number(req.params.userId);
+
+    if (!userId) {
+      return res.status(400).json({
+        status: false,
+        messages: ["Invalid user ID"]
+      });
+    }
+
+    // Check if user exists
+    const [userCheck] = await db.query(
+      "SELECT id, name FROM users WHERE id = ?",
+      [userId]
+    );
+
+    if (userCheck.length === 0) {
+      return res.status(404).json({
+        status: false,
+        messages: ["User not found"]
+      });
+    }
+
+    // Delete all tokens for this user
+    const [result] = await db.query(
+      "DELETE FROM user_details WHERE user_id = ? AND token IS NOT NULL",
+      [userId]
+    );
+
+    return res.json({
+      status: true,
+      messages: [`All sessions terminated for ${userCheck[0].name}`],
+      data: {
+        user_id: userId,
+        sessions_terminated: result.affectedRows
+      }
+    });
+
+  } catch (err) {
+    console.error("Delete all tokens error:", err);
+    return res.status(500).json({
+      status: false,
+      messages: ["Database error"],
       error: err.message
     });
   }
