@@ -233,7 +233,7 @@ router.put("/update/:id", verifyToken, async (req, res) => {
 });
 
 /* ========================================================
-   RESET USER PASSWORD 
+   RESET USER PASSWORD
 ======================================================== */
 router.put("/reset-password/:id", verifyToken, async (req, res) => {
   try {
