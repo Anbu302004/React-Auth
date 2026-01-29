@@ -47,7 +47,7 @@ router.get("/users", verifyToken, async (req, res) => {
 
     // Fetch paginated users
     const dataSql = `
-      SELECT u.status, u.id, u.name, u.email, u.phone_number,
+      SELECT u.status, u.id, u.name, u.email, u.phone_number, u.profile_image,
              ur.role_id, r.name AS role
       ${baseSql}
       LIMIT ? OFFSET ?
@@ -143,14 +143,15 @@ router.post("/create", verifyToken, async (req, res) => {
 });
 
 /* ========================================================
-   UPDATE USER (with password update capability)
+   UPDATE USER (with password and profile_image update capability)
+   ⭐ UPDATED TO HANDLE PROFILE IMAGE
 ======================================================== */
 router.put("/update/:id", verifyToken, async (req, res) => {
   try {
     if (req.user.role !== "admin") return res.status(403).json({ status: false, message: "Access denied Authroization Required" });
 
     const userId = req.params.id;
-    const { name, email, phone_number, password, role_id, status } = req.body;
+    const { name, email, phone_number, password, role_id, status, profile_image } = req.body;
     const errors = [];
 
     if (!name || name.trim().length < 3 || name.trim().length > 50)
@@ -185,7 +186,7 @@ router.put("/update/:id", verifyToken, async (req, res) => {
     });
     if (duplicateErrors.length > 0) return res.status(400).json({ status: false, messages: [...new Set(duplicateErrors)] });
 
-    // Build update
+    // Build update query dynamically
     const fields = [name, email, phone_number];
     let sql = "UPDATE users SET name = ?, email = ?, phone_number = ?, email_verify = 0, phone_verify = 0";
 
@@ -199,6 +200,12 @@ router.put("/update/:id", verifyToken, async (req, res) => {
       fields.push(finalStatus);
     }
 
+    // ⭐ NEW: Handle profile image update
+    if (profile_image) {
+      sql += ", profile_image = ?";
+      fields.push(profile_image);
+    }
+
     sql += " WHERE id = ?";
     fields.push(userId);
 
@@ -208,7 +215,8 @@ router.put("/update/:id", verifyToken, async (req, res) => {
     const [roleRes] = await db.query("SELECT name AS role FROM roles WHERE id = ?", [role_id]);
     const roleName = roleRes?.[0]?.role || null;
 
-    const [userRes] = await db.query("SELECT * FROM users WHERE id = ?", [userId]);
+    // ⭐ Make sure to select all fields including profile_image
+    const [userRes] = await db.query("SELECT id, name, email, phone_number, status, email_verify, phone_verify, profile_image FROM users WHERE id = ?", [userId]);
 
     return res.json({
       status: true,
@@ -223,7 +231,9 @@ router.put("/update/:id", verifyToken, async (req, res) => {
         status: userRes[0].status,
         email_verify: userRes[0].email_verify,
         phone_verify: userRes[0].phone_verify,
-        password_updated: !!password
+        profile_image: userRes[0].profile_image, // ⭐ NEW: Return profile image
+        password_updated: !!password,
+        image_updated: !!profile_image // ⭐ NEW: Flag to indicate image was updated
       }
     });
   } catch (err) {
@@ -297,6 +307,7 @@ router.put("/reset-password/:id", verifyToken, async (req, res) => {
 
 /* ========================================================
    USER OVERVIEW (VIEW DETAILS)
+   ⭐ UPDATED TO INCLUDE PROFILE IMAGE
 ======================================================== */
 router.get("/overview/:id", verifyToken, async (req, res) => {
   try {
@@ -319,6 +330,7 @@ router.get("/overview/:id", verifyToken, async (req, res) => {
         u.email_verify,
         u.phone_verify,
         u.created_at,
+        u.profile_image,
         r.id AS role_id,
         r.name AS role
       FROM users u

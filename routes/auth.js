@@ -436,16 +436,29 @@ router.post("/reset-password", async (req, res) => {
       message: "Server error"
     });
   }
-});
-router.put("/update", verifyToken, async (req, res) => {
+});// ========================= UPDATE PROFILE =========================
+ router.put("/update", verifyToken, async (req, res) => {
   try {
     const userId = req.user.id;
     let { name, phone_number, email, profile_image } = req.body || {};
 
+    // Debug logging
+    console.log('🔍 DEBUG - Received data:');
+    console.log('- userId:', userId);
+    console.log('- name:', name);
+    console.log('- email:', email);
+    console.log('- phone_number:', phone_number);
+    console.log('- profile_image length:', profile_image?.length || 0);
+    console.log('- profile_image is undefined?', profile_image === undefined);
+
+    // Trim and process data (DON'T set profile_image to null)
     name = name?.trim();
     phone_number = phone_number?.trim();
     email = email?.trim().toLowerCase();
-    profile_image = profile_image?.trim() || null;
+    // Leave profile_image as-is (undefined if not provided)
+
+    console.log('🔍 After processing:');
+    console.log('- profile_image is undefined?', profile_image === undefined);
 
     const [userResult] = await db.query(
       "SELECT status, email, phone_number FROM users WHERE id = ?",
@@ -484,15 +497,15 @@ router.put("/update", verifyToken, async (req, res) => {
     if (!name) errors.push("Name is required");
     if (name && (name.length < 3 || name.length > 50))
       errors.push("Name must be between 3 and 50 characters");
-    if (name && !nameRegex.test(name))
+    if (name && !/^[A-Za-z\s]+$/.test(name))
       errors.push("Name can only contain letters and spaces");
 
     if (!phone_number) errors.push("Phone number is required");
-    if (phone_number && !phoneRegex.test(phone_number))
+    if (phone_number && !/^[0-9]{10}$/.test(phone_number))
       errors.push("Phone number must be 10 digits");
 
     if (!email) errors.push("Email is required");
-    if (email && !emailRegex.test(email))
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
       errors.push("Invalid email format");
 
     if (errors.length)
@@ -532,9 +545,20 @@ router.put("/update", verifyToken, async (req, res) => {
     const emailChanged = email !== user.email;
     const phoneChanged = phone_number !== user.phone_number;
 
-    let sql =
-      "UPDATE users SET name = ?, phone_number = ?, email = ?, profile_image = ?";
-    const params = [name, phone_number, email, profile_image];
+    console.log('🔍 Preparing SQL query...');
+    
+    // ⭐ BUILD SQL DYNAMICALLY - only update profile_image if provided
+    let sql = "UPDATE users SET name = ?, phone_number = ?, email = ?";
+    const params = [name, phone_number, email];
+
+    // ⭐ CRITICAL FIX: Only update profile_image if it was explicitly provided in request
+    if (profile_image !== undefined) {
+      sql += ", profile_image = ?";
+      params.push(profile_image);
+      console.log('✅ Including profile_image in update (length:', profile_image?.length || 0, ')');
+    } else {
+      console.log('⏭️ Skipping profile_image update - keeping existing value in database');
+    }
 
     if (emailChanged) sql += ", email_verify = 0";
     if (phoneChanged) sql += ", phone_verify = 0";
@@ -542,7 +566,12 @@ router.put("/update", verifyToken, async (req, res) => {
     sql += " WHERE id = ?";
     params.push(userId);
 
+    console.log('🔍 Final SQL:', sql);
+    console.log('🔍 Params count:', params.length);
+
     await db.query(sql, params);
+
+    console.log('✅ Update successful, fetching updated data...');
 
     const [updatedResults] = await db.query(
       `SELECT u.id, u.name, u.email, u.phone_number,
@@ -556,6 +585,9 @@ router.put("/update", verifyToken, async (req, res) => {
       [userId]
     );
 
+    console.log('✅ Profile updated successfully!');
+    console.log('📤 Returning data with profile_image:', updatedResults[0].profile_image ? 'YES' : 'NO');
+
     return res.json({
       status: true,
       message: "Profile updated successfully",
@@ -563,7 +595,10 @@ router.put("/update", verifyToken, async (req, res) => {
     });
 
   } catch (err) {
-    console.error(err);
+    console.error('❌ ERROR in /update route:');
+    console.error('Error name:', err.name);
+    console.error('Error message:', err.message);
+    console.error('Error stack:', err.stack);
 
     return res.status(500).json({
       status: false,
@@ -571,8 +606,6 @@ router.put("/update", verifyToken, async (req, res) => {
     });
   }
 });
-
-
 // ========================= LOGOUT =========================
 router.post("/logout", verifyToken, logout);
 
