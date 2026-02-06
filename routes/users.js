@@ -8,8 +8,19 @@ const router = express.Router();
 router.get("/profile", verifyToken, async (req, res) => {
   try {
     const userId = req.user.id;
+
     const [results] = await db.query(
-      "SELECT id, name, email, phone_number, status, password, email_verify, phone_verify FROM users WHERE id = ?",
+      `SELECT 
+        id,
+        name,
+        email,
+        phone_number,
+        profile_image,
+        status,
+        email_verify,
+        phone_verify
+      FROM users 
+      WHERE id = ?`,
       [userId]
     );
 
@@ -23,7 +34,8 @@ router.get("/profile", verifyToken, async (req, res) => {
 
     const user = results[0];
 
-    if (user.status === 2) {
+    // 🔒 Account checks
+    if (Number(user.status) === 2) {
       return res.status(403).json({
         status: false,
         messages: ["Account is deactivated. Please login using OTP to activate."],
@@ -31,7 +43,7 @@ router.get("/profile", verifyToken, async (req, res) => {
       });
     }
 
-    if (user.status === 0) {
+    if (Number(user.status) === 0) {
       return res.status(403).json({
         status: false,
         messages: ["Account is blocked. Contact support."],
@@ -39,22 +51,27 @@ router.get("/profile", verifyToken, async (req, res) => {
       });
     }
 
+    // ✅ Success response
     return res.json({
       status: true,
-      data: [
-        {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          phone_number: user.phone_number,
-          status: user.status,
-          email_verify: user.email_verify,
-          phone_verify: user.phone_verify
-        }
-      ]
+      data: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        phone_number: user.phone_number,
+        profile_image: user.profile_image
+        ? user.profile_image.startsWith("data:image")
+        ? user.profile_image
+        : `data:image/jpeg;base64,${user.profile_image}`
+        : null,
+        status: user.status,
+        email_verify: user.email_verify,
+        phone_verify: user.phone_verify
+      }
     });
+
   } catch (err) {
-    console.error(err);
+    console.error("Get profile error:", err);
     return res.status(500).json({
       status: false,
       messages: ["Database error"],
